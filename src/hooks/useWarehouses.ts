@@ -25,3 +25,26 @@ export const useCreateWarehouse = () => {
 
 export const useWarehouseSummary = () =>
   useQuery({ queryKey: ['warehouses', 'summary'], queryFn: () => api.get('/warehouses/summary').then(r => r.data) });
+
+export const useUpdateWarehouse = () => {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ id, ...data }: Partial<Warehouse> & { id: number }) =>
+            api.put<Warehouse>(`/warehouses/${id}`, data).then(res => res.data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['warehouses'] });
+            queryClient.invalidateQueries({ queryKey: ['warehouses', 'summary'] });
+        },
+    });
+};
+
+export const useToggleWarehouse = () => {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (id: number) => api.patch(`/warehouses/${id}/toggle`).then(res => res.data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['warehouses'] });
+            queryClient.invalidateQueries({ queryKey: ['warehouses', 'summary'] });
+        },
+    });
+};

@@ -35,9 +35,10 @@ export interface Component{
     unite:string;
     category?:Category;
     supplier?:Supplier;
-    prixAchat:number;
+    prixAchat:number |string;
     isActive:boolean;
-    suiteAlerte:number;
+    suiteAlerte:number |string;
+    imagrUrl?:string;
 }
 
 export interface InventoryItem{
