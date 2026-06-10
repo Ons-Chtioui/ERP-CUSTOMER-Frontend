@@ -20,6 +20,7 @@ import { Can } from '@/components/auth/Can';
 import api from '@/lib/api';
 import { mediaUrl } from '@/lib/media';
 import { Component, Category, Supplier } from '@/types/stock';
+import { BarcodeLookup } from '@/components/stock/BarcodeLookup';
 
 // Interface étendue pour inclure le stock
 interface ComponentWithStock extends Component {
@@ -207,10 +208,12 @@ export default function ComponentsPage() {
         </div>
       </div>
 
+      {/* Recherche par code-barres */}
+      <BarcodeLookup className="mb-2" />
+
       {/* Filtres */}
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="relative">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">          <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
             <input
               type="text"

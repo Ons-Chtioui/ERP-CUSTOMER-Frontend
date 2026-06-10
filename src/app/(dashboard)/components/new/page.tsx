@@ -27,6 +27,13 @@ const componentSchema = z.object({
   prixAchat: z.coerce.number().min(0, 'Prix positif requis').default(0),
   prixVente: z.coerce.number().min(0, 'Prix positif requis').default(0),
   seuilAlerte: z.coerce.number().int().min(0).default(0),
+  // Optionnel — si vide le backend génère un EAN-13 automatiquement
+  barcode: z
+    .string()
+    .max(100)
+    .regex(/^[0-9]*$/, 'Le code-barres ne doit contenir que des chiffres')
+    .optional()
+    .or(z.literal('')),
   categoryId: z.coerce.number().optional(),
   supplierId: z.coerce.number().optional(),
 });
@@ -151,7 +158,10 @@ export default function NewComponentPage() {
   // ── Mutation création composant ───────────────────────────────
   const createMutation = useMutation({
     mutationFn: async (data: ComponentFormData) => {
-      const response = await api.post('/components', data);
+      const response = await api.post('/components', {
+        ...data,
+        barcode: data.barcode?.trim() || undefined, // vide → génération auto
+      });
       const component = response.data;
       if (imageFile && component.id) {
         const formData = new FormData();
@@ -303,6 +313,27 @@ export default function NewComponentPage() {
               <input {...register('seuilAlerte')} type="number" step="1" min="0" placeholder="0" className={inputClass(!!errors.seuilAlerte)} />
               <p className="text-gray-500 text-xs mt-1">Déclenche une alerte si stock ≤ valeur</p>
             </div>
+          </div>
+
+          {/* Code-barres */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">
+              Code-barres
+              <span className="ml-2 text-xs text-gray-500 font-normal">(optionnel — généré automatiquement si vide)</span>
+            </label>
+            <div className="relative">
+              <input
+                {...register('barcode')}
+                type="text"
+                inputMode="numeric"
+                placeholder="Laisser vide pour génération automatique EAN-13"
+                className={cn(inputClass(!!errors.barcode), 'font-mono pr-24')}
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">
+                EAN-13
+              </span>
+            </div>
+            {errors.barcode && <p className="text-red-400 text-xs mt-1">{errors.barcode.message}</p>}
           </div>
         </div>
 

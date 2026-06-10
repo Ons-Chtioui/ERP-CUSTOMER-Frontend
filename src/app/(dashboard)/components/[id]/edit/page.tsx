@@ -13,7 +13,6 @@ import { cn } from '@/lib/utils';
 import api from '@/lib/api';
 import type { Category, Supplier } from '@/types/stock';
 
-// ─── Schéma ──────────────────────────────────────────────────────────────────
 const componentSchema = z.object({
   nom: z.string().min(2, 'Le nom est requis').max(150),
   reference: z
@@ -26,6 +25,12 @@ const componentSchema = z.object({
   prixAchat: z.coerce.number().min(0, 'Prix positif requis').default(0),
   prixVente: z.coerce.number().min(0, 'Prix positif requis').default(0),
   seuilAlerte: z.coerce.number().int().min(0).default(0),
+  barcode: z
+    .string()
+    .max(100)
+    .regex(/^[0-9]*$/, 'Chiffres uniquement')
+    .optional()
+    .or(z.literal('')),
   categoryId: z.coerce.number().optional(),
   supplierId: z.coerce.number().optional(),
 });
@@ -140,6 +145,7 @@ export default function EditComponentPage() {
         prixAchat: Number(component.prixAchat) || 0,
         prixVente: Number(component.prixVente) || 0,
         seuilAlerte: Number(component.seuilAlerte) || 0,
+        barcode: component.barcode ?? '',
         categoryId: component.category?.id,
         supplierId: component.supplier?.id,
       });
@@ -169,7 +175,10 @@ export default function EditComponentPage() {
 
   const updateMutation = useMutation({
     mutationFn: (data: ComponentFormData) =>
-      api.put(`/components/${componentId}`, data),
+      api.put(`/components/${componentId}`, {
+        ...data,
+        barcode: data.barcode?.trim() || undefined,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['components'] });
       queryClient.invalidateQueries({ queryKey: ['component', componentId] });
@@ -283,6 +292,27 @@ export default function EditComponentPage() {
               <input {...register('seuilAlerte')} type="number" step="1" min="0" className={inputClass(!!errors.seuilAlerte)} />
               <p className="text-gray-500 text-xs mt-1">Déclenche une alerte si stock ≤ valeur</p>
             </div>
+          </div>
+
+          {/* Code-barres */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">
+              Code-barres
+              <span className="ml-2 text-xs text-gray-500 font-normal">(laisser vide pour conserver l'actuel)</span>
+            </label>
+            <div className="relative">
+              <input
+                {...register('barcode')}
+                type="text"
+                inputMode="numeric"
+                placeholder="Code EAN-13 en chiffres"
+                className={cn(inputClass(!!errors.barcode), 'font-mono pr-24')}
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">
+                EAN-13
+              </span>
+            </div>
+            {errors.barcode && <p className="text-red-400 text-xs mt-1">{errors.barcode.message}</p>}
           </div>
         </div>
 

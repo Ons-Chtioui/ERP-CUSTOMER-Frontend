@@ -1,11 +1,23 @@
 /**
- * Convertit un chemin relatif de fichier backend (/uploads/...)
- * en URL absolue pointant vers le serveur backend.
+ * Helper pour construire les URLs des médias (images, fichiers)
+ * servis par le backend en dehors du préfixe /api.
+ *
+ * Usage : mediaUrl('/uploads/components/xxx.jpg')
+ * → 'http://localhost:3001/uploads/components/xxx.jpg'
  */
-export function mediaUrl(path: string | undefined | null): string | undefined {
-  if (!path) return undefined;
-  // Si déjà une URL absolue (http/https), la retourner telle quelle
-  if (path.startsWith('http')) return path;
-  const base = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') ?? 'http://localhost:3001';
-  return `${base}${path}`;
+export function mediaUrl(path: string | null | undefined): string {
+  if (!path) return '';
+
+  // Déjà une URL absolue
+  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+
+  // Base = NEXT_PUBLIC_API_URL sans le suffixe /api
+  const base = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api')
+    .replace(/\/api\/?$/, '');
+
+  const normalized = path.startsWith('/') ? path : `/${path}`;
+  return `${base}${normalized}`;
 }
+
+/** Alias — même fonction, nom différent */
+export { mediaUrl as getImageUrl };
