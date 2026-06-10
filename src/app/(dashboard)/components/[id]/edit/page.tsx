@@ -1,14 +1,13 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter, useParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  Loader2, ArrowLeft, Package, Building2, Tag,
-  AlertTriangle, Upload, X, Plus,
+  Loader2, ArrowLeft, Package, Building2, Tag, AlertTriangle, Plus,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import api from '@/lib/api';
@@ -33,7 +32,7 @@ const componentSchema = z.object({
 
 type ComponentFormData = z.infer<typeof componentSchema>;
 
-// ─── Mini-modal créer catégorie / fournisseur ─────────────────────────────────
+// ─── Mini-modal création rapide ───────────────────────────────────────────────
 function QuickCreateModal({
   title,
   fields,
@@ -98,14 +97,20 @@ function QuickCreateModal({
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
-export default function NewComponentPage() {
+export default function EditComponentPage() {
   const router = useRouter();
+  const params = useParams();
   const queryClient = useQueryClient();
+  const componentId = parseInt(params.id as string);
   const [error, setError] = useState('');
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [showCatModal, setShowCatModal] = useState(false);
   const [showSupModal, setShowSupModal] = useState(false);
+
+  const { data: component, isLoading: loadingComp } = useQuery({
+    queryKey: ['component', componentId],
+    queryFn: () => api.get(`/components/${componentId}`).then((r) => r.data),
+    enabled: !!componentId,
+  });
 
   const { data: categories = [] } = useQuery<Category[]>({
     queryKey: ['categories'],
@@ -120,12 +125,26 @@ export default function NewComponentPage() {
   const {
     register,
     handleSubmit,
+    reset,
     setValue,
     formState: { errors, isSubmitting },
-  } = useForm<ComponentFormData>({
-    resolver: zodResolver(componentSchema),
-    defaultValues: { unite: 'unité', prixAchat: 0, prixVente: 0, seuilAlerte: 0 },
-  });
+  } = useForm<ComponentFormData>({ resolver: zodResolver(componentSchema) });
+
+  useEffect(() => {
+    if (component) {
+      reset({
+        nom: component.nom,
+        reference: component.reference,
+        description: component.description ?? '',
+        unite: component.unite ?? 'unité',
+        prixAchat: Number(component.prixAchat) || 0,
+        prixVente: Number(component.prixVente) || 0,
+        seuilAlerte: Number(component.seuilAlerte) || 0,
+        categoryId: component.category?.id,
+        supplierId: component.supplier?.id,
+      });
+    }
+  }, [component, reset]);
 
   // ── Mutations création catégorie / fournisseur ────────────────
   const catMutation = useMutation({
@@ -148,44 +167,20 @@ export default function NewComponentPage() {
     },
   });
 
-  // ── Mutation création composant ───────────────────────────────
-  const createMutation = useMutation({
-    mutationFn: async (data: ComponentFormData) => {
-      const response = await api.post('/components', data);
-      const component = response.data;
-      if (imageFile && component.id) {
-        const formData = new FormData();
-        formData.append('image', imageFile);
-        await api.post(`/components/${component.id}/image`, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        }).catch(() => {}); // image non bloquante
-      }
-      return component;
-    },
+  const updateMutation = useMutation({
+    mutationFn: (data: ComponentFormData) =>
+      api.put(`/components/${componentId}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['components'] });
-      router.push('/components');
+      queryClient.invalidateQueries({ queryKey: ['component', componentId] });
+      router.push(`/components/${componentId}`);
     },
     onError: (err: unknown) => {
       const msg = (err as { response?: { data?: { message?: string | string[] } } })
         ?.response?.data?.message;
-      setError(Array.isArray(msg) ? msg[0] : msg || 'Erreur lors de la création');
+      setError(Array.isArray(msg) ? msg[0] : msg || 'Erreur lors de la modification');
     },
   });
-
-  const onImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 2 * 1024 * 1024) { setError('Image max 2 Mo'); return; }
-    setImageFile(file);
-    setImagePreview(URL.createObjectURL(file));
-  };
-
-  const removeImage = () => {
-    if (imagePreview) URL.revokeObjectURL(imagePreview);
-    setImageFile(null);
-    setImagePreview(null);
-  };
 
   const inputClass = (hasError: boolean) =>
     cn(
@@ -196,94 +191,79 @@ export default function NewComponentPage() {
         : 'border-gray-700 focus:border-indigo-500 focus:ring-indigo-500',
     );
 
+  if (loadingComp) {
+    return (
+      <div className="flex justify-center py-20">
+        <Loader2 className="w-6 h-6 animate-spin text-indigo-400" />
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-3xl mx-auto">
-      {/* En-tête */}
       <div className="flex items-center gap-4 mb-6">
         <button onClick={() => router.back()} className="p-2 hover:bg-gray-800 rounded-lg transition-colors">
           <ArrowLeft className="w-5 h-5 text-gray-400" />
         </button>
         <div>
-          <h1 className="text-2xl font-semibold text-white">Nouveau composant</h1>
-          <p className="text-gray-400 text-sm mt-0.5">Le code-barres sera généré automatiquement</p>
+          <h1 className="text-2xl font-semibold text-white">Modifier le composant</h1>
+          <p className="text-gray-400 text-sm mt-0.5">
+            {component?.nom} — <span className="font-mono">{component?.reference}</span>
+          </p>
         </div>
       </div>
 
-      <form onSubmit={handleSubmit((d) => createMutation.mutate(d))} className="space-y-6" noValidate>
+      <form onSubmit={handleSubmit((d) => updateMutation.mutate(d))} className="space-y-6" noValidate>
 
-        {/* ── Image ─────────────────────────────────────────────── */}
+        {/* ── Informations générales ───────────────────────────── */}
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-4">
           <h2 className="text-white font-medium flex items-center gap-2">
             <Package className="w-4 h-4 text-indigo-400" />
-            Image du composant
-          </h2>
-          {!imagePreview ? (
-            <label className="flex flex-col items-center justify-center border-2 border-dashed border-gray-700 hover:border-gray-600 rounded-xl p-8 cursor-pointer transition-colors text-center">
-              <Upload className="w-10 h-10 text-gray-500 mb-3" />
-              <span className="text-gray-400 text-sm">Cliquer pour sélectionner une image</span>
-              <span className="text-gray-600 text-xs mt-1">PNG, JPG, WEBP — max 2 Mo</span>
-              <input type="file" accept="image/*" onChange={onImageChange} className="hidden" />
-            </label>
-          ) : (
-            <div className="relative inline-block">
-              <img src={imagePreview} alt="Aperçu" className="w-32 h-32 object-cover rounded-xl border border-gray-700" />
-              <button
-                type="button"
-                onClick={removeImage}
-                className="absolute -top-2 -right-2 p-1 bg-red-600 hover:bg-red-500 rounded-full transition-colors"
-              >
-                <X className="w-3 h-3 text-white" />
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* ── Informations générales ─────────────────────────────── */}
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-4">
-          <h2 className="text-white font-medium flex items-center gap-2">
-            <Tag className="w-4 h-4 text-indigo-400" />
             Informations générales
           </h2>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">Nom <span className="text-red-400">*</span></label>
-              <input {...register('nom')} placeholder="Ex: Vis M8 acier" className={inputClass(!!errors.nom)} />
+              <input {...register('nom')} className={inputClass(!!errors.nom)} />
               {errors.nom && <p className="text-red-400 text-xs mt-1">{errors.nom.message}</p>}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">Référence <span className="text-red-400">*</span></label>
-              <input {...register('reference')} placeholder="VIS-M8-001" className={cn(inputClass(!!errors.reference), 'font-mono uppercase')} />
+              <input {...register('reference')} className={cn(inputClass(!!errors.reference), 'font-mono uppercase')} />
               {errors.reference && <p className="text-red-400 text-xs mt-1">{errors.reference.message}</p>}
             </div>
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-1">Description</label>
-            <textarea {...register('description')} rows={3} placeholder="Description optionnelle..." className={cn(inputClass(false), 'resize-none')} />
+            <textarea {...register('description')} rows={3} className={cn(inputClass(false), 'resize-none')} />
           </div>
         </div>
 
-        {/* ── Prix & caractéristiques ────────────────────────────── */}
+        {/* ── Prix & caractéristiques ──────────────────────────── */}
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-4">
-          <h2 className="text-white font-medium">Prix & caractéristiques</h2>
+          <h2 className="text-white font-medium flex items-center gap-2">
+            <Tag className="w-4 h-4 text-indigo-400" />
+            Prix & caractéristiques
+          </h2>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">Prix d'achat (DTN)</label>
-              <input {...register('prixAchat')} type="number" step="0.001" min="0" placeholder="0.000" className={inputClass(!!errors.prixAchat)} />
+              <input {...register('prixAchat')} type="number" step="0.001" min="0" className={inputClass(!!errors.prixAchat)} />
               {errors.prixAchat && <p className="text-red-400 text-xs mt-1">{errors.prixAchat.message}</p>}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">Prix de vente (DTN)</label>
-              <input {...register('prixVente')} type="number" step="0.001" min="0" placeholder="0.000" className={inputClass(!!errors.prixVente)} />
+              <input {...register('prixVente')} type="number" step="0.001" min="0" className={inputClass(!!errors.prixVente)} />
               {errors.prixVente && <p className="text-red-400 text-xs mt-1">{errors.prixVente.message}</p>}
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Unité de mesure</label>
+              <label className="block text-sm font-medium text-gray-300 mb-1">Unité</label>
               <select {...register('unite')} className={inputClass(false)}>
                 <option value="unité">Unité</option>
                 <option value="kg">Kilogramme (kg)</option>
@@ -300,63 +280,46 @@ export default function NewComponentPage() {
               <label className="block text-sm font-medium text-gray-300 mb-1">
                 Seuil d'alerte <AlertTriangle className="w-3 h-3 inline text-orange-400 ml-1" />
               </label>
-              <input {...register('seuilAlerte')} type="number" step="1" min="0" placeholder="0" className={inputClass(!!errors.seuilAlerte)} />
+              <input {...register('seuilAlerte')} type="number" step="1" min="0" className={inputClass(!!errors.seuilAlerte)} />
               <p className="text-gray-500 text-xs mt-1">Déclenche une alerte si stock ≤ valeur</p>
             </div>
           </div>
         </div>
 
-        {/* ── Classification ─────────────────────────────────────── */}
+        {/* ── Classification ───────────────────────────────────── */}
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-4">
           <h2 className="text-white font-medium flex items-center gap-2">
             <Building2 className="w-4 h-4 text-indigo-400" />
             Classification
           </h2>
-
           <div className="grid grid-cols-2 gap-4">
-            {/* Catégorie */}
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="block text-sm font-medium text-gray-300">Catégorie</label>
-                <button
-                  type="button"
-                  onClick={() => setShowCatModal(true)}
-                  className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
-                >
+                <button type="button" onClick={() => setShowCatModal(true)} className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300">
                   <Plus className="w-3 h-3" /> Nouvelle
                 </button>
               </div>
               <select {...register('categoryId')} className={inputClass(false)}>
                 <option value="">-- Sélectionner --</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>{c.nom}</option>
-                ))}
+                {categories.map((c) => <option key={c.id} value={c.id}>{c.nom}</option>)}
               </select>
             </div>
-
-            {/* Fournisseur */}
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="block text-sm font-medium text-gray-300">Fournisseur</label>
-                <button
-                  type="button"
-                  onClick={() => setShowSupModal(true)}
-                  className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
-                >
+                <button type="button" onClick={() => setShowSupModal(true)} className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300">
                   <Plus className="w-3 h-3" /> Nouveau
                 </button>
               </div>
               <select {...register('supplierId')} className={inputClass(false)}>
                 <option value="">-- Sélectionner --</option>
-                {suppliers.map((s) => (
-                  <option key={s.id} value={s.id}>{s.nom}</option>
-                ))}
+                {suppliers.map((s) => <option key={s.id} value={s.id}>{s.nom}</option>)}
               </select>
             </div>
           </div>
         </div>
 
-        {/* Erreur */}
         {error && (
           <div className="bg-red-950 border border-red-800 rounded-lg px-4 py-3 text-red-400 text-sm flex items-center justify-between">
             <span>{error}</span>
@@ -364,23 +327,21 @@ export default function NewComponentPage() {
           </div>
         )}
 
-        {/* Actions */}
         <div className="flex justify-end gap-3">
           <button type="button" onClick={() => router.back()} className="px-4 py-2 border border-gray-700 rounded-lg text-sm text-gray-300 hover:bg-gray-800 transition-colors">
             Annuler
           </button>
           <button
             type="submit"
-            disabled={isSubmitting || createMutation.isPending}
+            disabled={isSubmitting || updateMutation.isPending}
             className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors"
           >
-            {(isSubmitting || createMutation.isPending) && <Loader2 className="w-4 h-4 animate-spin" />}
-            {isSubmitting || createMutation.isPending ? 'Création...' : 'Créer le composant'}
+            {(isSubmitting || updateMutation.isPending) && <Loader2 className="w-4 h-4 animate-spin" />}
+            Enregistrer les modifications
           </button>
         </div>
       </form>
 
-      {/* Modal création catégorie */}
       {showCatModal && (
         <QuickCreateModal
           title="Nouvelle catégorie"
@@ -394,7 +355,6 @@ export default function NewComponentPage() {
         />
       )}
 
-      {/* Modal création fournisseur */}
       {showSupModal && (
         <QuickCreateModal
           title="Nouveau fournisseur"

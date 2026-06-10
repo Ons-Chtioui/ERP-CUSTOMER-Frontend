@@ -18,6 +18,7 @@ import {
 import { cn } from '@/lib/utils';
 import { Can } from '@/components/auth/Can';
 import api from '@/lib/api';
+import { mediaUrl } from '@/lib/media';
 import { Component, Category, Supplier } from '@/types/stock';
 
 // Interface étendue pour inclure le stock
@@ -253,7 +254,8 @@ export default function ComponentsPage() {
                 <th className="text-left text-xs font-medium text-gray-400 px-4 py-3">Référence</th>
                 <th className="text-left text-xs font-medium text-gray-400 px-4 py-3">Nom</th>
                 <th className="text-left text-xs font-medium text-gray-400 px-4 py-3">Catégorie</th>
-                <th className="text-right text-xs font-medium text-gray-400 px-4 py-3">Prix unitaire</th>
+                <th className="text-right text-xs font-medium text-gray-400 px-4 py-3">Prix achat</th>
+                <th className="text-right text-xs font-medium text-gray-400 px-4 py-3">Prix vente</th>
                 <th className="text-right text-xs font-medium text-gray-400 px-4 py-3">Stock</th>
                 <th className="text-center text-xs font-medium text-gray-400 px-4 py-3">Statut</th>
                 <th className="text-right text-xs font-medium text-gray-400 px-4 py-3">Actions</th>
@@ -274,19 +276,37 @@ export default function ComponentsPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="text-white text-sm font-medium">{comp.nom}</span>
-                      {comp.description && (
-                        <p className="text-gray-500 text-xs mt-0.5 line-clamp-1">
-                          {comp.description}
-                        </p>
-                      )}
+                      <div className="flex items-center gap-3">
+                        {comp.imageUrl ? (
+                          <img
+                            src={mediaUrl(comp.imageUrl)}
+                            alt={comp.nom}
+                            className="w-9 h-9 rounded-lg object-cover border border-gray-700 shrink-0"
+                          />
+                        ) : (
+                          <div className="w-9 h-9 rounded-lg bg-gray-800 border border-gray-700 flex items-center justify-center shrink-0">
+                            <Package className="w-4 h-4 text-gray-600" />
+                          </div>
+                        )}
+                        <div>
+                          <span className="text-white text-sm font-medium">{comp.nom}</span>
+                          {comp.description && (
+                            <p className="text-gray-500 text-xs mt-0.5 line-clamp-1">{comp.description}</p>
+                          )}
+                        </div>
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-400">
                       {comp.category?.nom || '—'}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <span className="text-sm text-white font-mono">
-                        {prix.toFixed(3)} <span className="text-xs text-gray-400">DTN</span>
+                        {Number(comp.prixAchat).toFixed(3)} <span className="text-xs text-gray-400">DTN</span>
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <span className="text-sm text-green-400 font-mono">
+                        {Number(comp.prixVente ?? 0).toFixed(3)} <span className="text-xs text-gray-400">DTN</span>
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
