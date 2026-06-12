@@ -6,8 +6,9 @@ import { useWarehouses } from '@/hooks/useWarehouses';
 import { useStockAlerts } from '@/hooks/useStockAlerts';
 import { useStockMovements } from '@/hooks/useStockMovements';
 import {
-  Package, Warehouse, AlertTriangle, TrendingUp,
-  TrendingDown, ArrowRightLeft, Bell, Users,
+  Warehouse, AlertTriangle, TrendingUp,
+  TrendingDown, ArrowRightLeft, Bell,
+  Wallet,
 } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
@@ -66,7 +67,7 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between mb-3">
             <p className="text-gray-400 text-sm">Valeur stock</p>
             <div className="w-9 h-9 bg-green-900/40 rounded-lg flex items-center justify-center">
-              <Package className="w-5 h-5 text-green-400" />
+              <Wallet className="w-5 h-5 text-green-400" />
             </div>
           </div>
           <p className="text-2xl font-bold text-white">{totalValue.toFixed(0)}</p>

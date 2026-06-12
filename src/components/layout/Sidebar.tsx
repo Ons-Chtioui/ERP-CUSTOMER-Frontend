@@ -12,6 +12,8 @@ import {
   ClipboardList,
   Bell,
   Shield,
+  Layers,
+  Tag,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
@@ -26,6 +28,8 @@ const NAV = [
   { href: '/stock-movements', label: 'Mouvements',   icon: TrendingUp,      permission: 'stock.view' },
   { href: '/inventory',       label: 'Inventaire',   icon: ClipboardList,   permission: 'stock.inventory' },
   { href: '/alerts',          label: 'Alertes',      icon: Bell,            permission: 'stock.view' },
+  { href: '/products',        label: 'Produits finis', icon: Layers,        permission: 'bom.view' },
+  { href: '/product-categories', label: 'Catégories',   icon: Tag,           permission: 'bom.view' },
   { href: '/profile',         label: 'Mon profil',   icon: UserCircle,      permission: null },
 ];
 

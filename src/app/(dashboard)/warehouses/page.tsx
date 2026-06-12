@@ -83,7 +83,7 @@ export default function WarehousesPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Euro className="w-4 h-4 text-gray-500" />
+                  {/* <Euro className="w-4 h-4 text-gray-500" /> */}
                   <div>
                     <div className="text-xs text-gray-500">Valeur</div>
                     <div className="text-white font-semibold">{s.totalValue.toFixed(2)} DTN</div>

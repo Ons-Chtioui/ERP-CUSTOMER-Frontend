@@ -13,7 +13,10 @@ import {
   Trash2,
   AlertTriangle,
   Filter,
-  DollarSign
+  DollarSign,
+  TrendingUp,
+  Coins,
+  Wallet
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Can } from '@/components/auth/Can';
@@ -184,7 +187,7 @@ export default function ComponentsPage() {
               <p className="text-2xl font-bold text-white">{totalValue.toFixed(3)} DTN</p>
             </div>
             <div className="w-10 h-10 bg-green-900/50 rounded-full flex items-center justify-center">
-              <DollarSign className="w-5 h-5 text-green-400" />
+              <Wallet className="w-5 h-5 text-green-400" />
             </div>
           </div>
         </div>
