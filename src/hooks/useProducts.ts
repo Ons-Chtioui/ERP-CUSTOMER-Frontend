@@ -7,6 +7,7 @@ export const useProducts = (filters?: {
   search?: string;
   categoryId?: number;
   parentId?: number;
+  withStock?: boolean;
 }) =>
   useQuery<Product[]>({
     queryKey: ['products', filters],
@@ -15,6 +16,7 @@ export const useProducts = (filters?: {
       if (filters?.search)     p.set('search',     filters.search);
       if (filters?.categoryId) p.set('categoryId', String(filters.categoryId));
       if (filters?.parentId)   p.set('parentId',   String(filters.parentId));
+      if (filters?.withStock)  p.set('withStock',  'true');
       return api.get(`/products${p.toString() ? `?${p}` : ''}`).then(r => r.data);
     },
   });

@@ -31,6 +31,28 @@ export interface Product {
   bomLines?: BomLine[];
   createdAt: string;
   updatedAt: string;
+  stock?: ProductOrderStock;
+}
+
+export interface ProductOrderStock {
+  stockFini: number;
+  stockFabricable: number;
+  stockTotal: number;
+  goulot: { componentId: number; nom: string; fabricable: number } | null;
+}
+
+export interface FulfillmentPreview {
+  productId: number;
+  productName: string;
+  quantity: number;
+  stockFini: number;
+  stockFabricable: number;
+  stockTotal: number;
+  fromStock: number;
+  fromAssembly: number;
+  canFulfill: boolean;
+  missing: number;
+  source: 'stock' | 'assembly' | 'mixed';
 }
 
 export interface BomLine {

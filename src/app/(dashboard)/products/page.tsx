@@ -20,6 +20,7 @@ export default function ProductsPage() {
   const { data: products = [], isLoading } = useProducts({
     search: search || undefined,
     categoryId: categoryId ? +categoryId : undefined,
+    withStock: true,
   });
   const { data: categories = [] } = useProductCategories();
   const archive = useArchiveProduct();
@@ -99,6 +100,9 @@ export default function ProductsPage() {
                 <th className="text-right text-xs font-medium text-gray-400 px-4 py-3">Coût revient</th>
                 <th className="text-right text-xs font-medium text-gray-400 px-4 py-3">Prix vente</th>
                 <th className="text-right text-xs font-medium text-gray-400 px-4 py-3">Marge</th>
+                <th className="text-right text-xs font-medium text-gray-400 px-4 py-3">Stock fini</th>
+                <th className="text-right text-xs font-medium text-gray-400 px-4 py-3">Fabricable</th>
+                <th className="text-right text-xs font-medium text-gray-400 px-4 py-3">Dispo. totale</th>
                 <th className="text-center text-xs font-medium text-gray-400 px-4 py-3">BOM</th>
                 <th className="text-right text-xs font-medium text-gray-400 px-4 py-3">Actions</th>
               </tr>
@@ -110,6 +114,9 @@ export default function ProductsPage() {
                 const marge = prixVenteEffectif - cout;
                 const margePct = cout > 0 ? (marge / cout) * 100 : 0;
                 const hasBom = (p.bomLines?.length ?? 0) > 0;
+                const stockFini = p.stock?.stockFini ?? 0;
+                const stockFabricable = p.stock?.stockFabricable ?? 0;
+                const stockTotal = p.stock?.stockTotal ?? 0;
 
                 return (
                   <tr key={p.id} className="hover:bg-gray-800/50 transition-colors">
@@ -151,6 +158,24 @@ export default function ProductsPage() {
                         {marge >= 0 ? '+' : ''}{marge.toFixed(3)}
                       </span>
                       <span className="text-gray-500 text-xs ml-1">({margePct.toFixed(0)}%)</span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <span className={cn('text-sm font-mono', stockFini > 0 ? 'text-green-400' : 'text-gray-500')}>
+                        {stockFini}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <span className={cn('text-sm font-mono', stockFabricable > 0 ? 'text-blue-400' : 'text-gray-500')}>
+                        {stockFabricable}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <span className={cn('text-sm font-semibold font-mono', stockTotal > 0 ? 'text-emerald-400' : 'text-gray-500')}>
+                        {stockTotal}
+                      </span>
+                      {stockFini === 0 && stockFabricable > 0 && (
+                        <span className="block text-xs text-blue-400/80">via composants</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-center">
                       {hasBom ? (

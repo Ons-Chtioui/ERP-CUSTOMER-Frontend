@@ -14,6 +14,7 @@ import {
   Shield,
   Layers,
   Tag,
+  ShoppingCart,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
@@ -29,6 +30,7 @@ const NAV = [
   { href: '/inventory',       label: 'Inventaire',   icon: ClipboardList,   permission: 'stock.inventory' },
   { href: '/alerts',          label: 'Alertes',      icon: Bell,            permission: 'stock.view' },
   { href: '/products',        label: 'Produits finis', icon: Layers,        permission: 'bom.view' },
+  { href: '/orders',          label: 'Commandes',      icon: ShoppingCart,  permission: 'orders.view' },
   { href: '/product-categories', label: 'Catégories',   icon: Tag,           permission: 'bom.view' },
   { href: '/profile',         label: 'Mon profil',   icon: UserCircle,      permission: null },
 ];
