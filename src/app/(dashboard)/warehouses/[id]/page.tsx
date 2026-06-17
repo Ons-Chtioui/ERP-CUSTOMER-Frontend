@@ -121,11 +121,11 @@ export default function WarehouseDetailPage() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <span className={cn('text-sm font-semibold', isLow ? 'text-orange-400' : 'text-white')}>
-                        {Number(item.quantity).toFixed(2)}
+                        {item.quantity}
                       </span>
                       <span className="text-gray-500 text-xs ml-1">{item.component?.unite}</span>
                     </td>
-                    <td className="px-4 py-3 text-right text-white text-sm">{Number(item.reservedQty).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-right text-white text-sm">{item.reservedQty}</td>
                     <td className="px-4 py-3 text-right text-sm text-gray-400">
                       {Number(item.component?.prixAchat).toFixed(3)} DTN
                     </td>

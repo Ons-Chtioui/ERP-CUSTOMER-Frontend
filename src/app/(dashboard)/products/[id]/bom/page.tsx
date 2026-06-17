@@ -97,7 +97,7 @@ export default function BomEditorPage() {
   const handleSave = async () => {
     setSaveError('');
     setSaveSuccess(false);
-    const invalid = lines.some(l => l.quantity <= 0);
+    const invalid = lines.some(l => !Number.isInteger(l.quantity) || l.quantity <= 0);
     if (invalid) { setSaveError('Toutes les quantités doivent être supérieures à 0'); return; }
 
     try {
@@ -218,10 +218,10 @@ export default function BomEditorPage() {
                           <td className="px-4 py-3 text-center">
                             <input
                               type="number"
-                              min="0.001"
-                              step="0.001"
+                              min="1"
+                              step="1"
                               value={line.quantity}
-                              onChange={e => updateQty(line.componentId, parseFloat(e.target.value) || 0)}
+                              onChange={e => updateQty(line.componentId, parseInt(e.target.value, 10) || 0)}
                               className={cn(
                                 'w-24 text-center bg-gray-800 border rounded-lg px-2 py-1.5 text-white text-sm focus:outline-none focus:border-indigo-500 transition-colors',
                                 line.quantity <= 0 ? 'border-red-600' : 'border-gray-700',

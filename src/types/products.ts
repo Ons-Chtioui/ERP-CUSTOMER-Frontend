@@ -36,7 +36,7 @@ export interface Product {
 export interface BomLine {
   id: number;
   component: Component;
-  quantity: number | string;
+  quantity: number;
 }
 
 export interface ProductionLog {
@@ -53,7 +53,7 @@ export interface ProductionLog {
 export interface ProductInventoryItem {
   id: number;
   warehouse: Warehouse;
-  quantity: number | string;
+  quantity: number;
   updatedAt: string;
 }
 

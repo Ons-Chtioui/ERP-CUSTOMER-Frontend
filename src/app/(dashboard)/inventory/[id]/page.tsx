@@ -203,7 +203,7 @@ function CountRow({
       </td>
 
       <td className="px-4 py-3 text-right">
-        <span className="text-white text-sm">{Number(line.quantityTheoretical).toFixed(2)}</span>
+        <span className="text-white text-sm">{line.quantityTheoretical}</span>
         <span className="text-gray-500 text-xs ml-1">{line.component?.unite}</span>
       </td>
 
@@ -212,7 +212,7 @@ function CountRow({
           <input
             ref={inputRef}
             type="number"
-            step="0.01"
+            step="1"
             min="0"
             value={countValue}
             onChange={(e) => onCountChange(e.target.value)}
@@ -226,7 +226,7 @@ function CountRow({
           />
         ) : (
           <span className={cn('text-sm font-medium', counted ? (ecart !== 0 ? 'text-orange-400' : 'text-white') : 'text-gray-600')}>
-            {counted ? Number(line.quantityCounted).toFixed(2) : '—'}
+            {counted ? line.quantityCounted : '—'}
           </span>
         )}
       </td>
@@ -236,7 +236,7 @@ function CountRow({
           <div className="flex items-center justify-end gap-1">
             {ecart > 0 ? <TrendingUp className="w-3 h-3 text-green-400" /> : ecart < 0 ? <TrendingDown className="w-3 h-3 text-red-400" /> : null}
             <span className={cn('text-sm font-semibold', ecart > 0 ? 'text-green-400' : ecart < 0 ? 'text-red-400' : 'text-gray-400')}>
-              {ecart > 0 ? `+${ecart.toFixed(2)}` : ecart.toFixed(2)}
+              {ecart > 0 ? `+${ecart}` : ecart}
             </span>
           </div>
         ) : <span className="text-gray-600 text-sm">—</span>}
@@ -364,11 +364,13 @@ export default function InventorySessionPage() {
   const handleSave = async (componentId: number) => {
     const val = counts[componentId];
     if (val === '' || val === undefined) return;
+    const qty = parseInt(val, 10);
+    if (!Number.isInteger(qty) || qty < 0) return;
     setSavingLine(componentId);
     try {
       await countLine.mutateAsync({
         sessionId, componentId,
-        quantityCounted: parseFloat(val),
+        quantityCounted: qty,
         notes: notes[componentId] || undefined,
       });
       setCounts((p) => { const n = { ...p }; delete n[componentId]; return n; });
@@ -637,9 +639,9 @@ export default function InventorySessionPage() {
                 <div key={l.id} className="flex items-center justify-between text-sm py-1.5 border-b border-gray-800 last:border-0">
                   <span className="text-white">{l.component?.nom}</span>
                   <div className="flex items-center gap-2">
-                    <span className="text-gray-400">{Number(l.quantityTheoretical).toFixed(2)} → {Number(l.quantityCounted).toFixed(2)} {l.component?.unite}</span>
+                    <span className="text-gray-400">{l.quantityTheoretical} → {l.quantityCounted} {l.component?.unite}</span>
                     <span className={cn('font-semibold', e > 0 ? 'text-green-400' : 'text-red-400')}>
-                      {e > 0 ? `+${e.toFixed(2)}` : e.toFixed(2)}
+                      {e > 0 ? `+${e}` : e}
                     </span>
                   </div>
                 </div>
@@ -649,7 +651,7 @@ export default function InventorySessionPage() {
           <div className="mt-3 pt-3 border-t border-gray-800 flex justify-between text-sm">
             <span className="text-gray-400">Écart global</span>
             <span className={cn('font-semibold', totalEcart > 0 ? 'text-green-400' : totalEcart < 0 ? 'text-red-400' : 'text-gray-400')}>
-              {totalEcart > 0 ? `+${totalEcart.toFixed(2)}` : totalEcart.toFixed(2)}
+              {totalEcart > 0 ? `+${totalEcart}` : totalEcart}
             </span>
           </div>
         </div>

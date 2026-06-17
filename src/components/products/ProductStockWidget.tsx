@@ -27,12 +27,14 @@ export function ProductStockWidget({ productId, unite = 'unité' }: Props) {
   const handleTransfer = async () => {
     if (!fromWh || !toWh || !qty) { setError('Tous les champs sont requis'); return; }
     if (fromWh === toWh) { setError('Source et destination identiques'); return; }
+    const qtyInt = parseInt(qty, 10);
+    if (!Number.isInteger(qtyInt) || qtyInt <= 0) { setError('La quantité doit être un entier positif'); return; }
     setError('');
     try {
       await transfer.mutateAsync({
         fromWarehouseId: +fromWh,
         toWarehouseId: +toWh,
-        quantity: +qty,
+        quantity: qtyInt,
       });
       setShowTransfer(false);
       setFromWh(''); setToWh(''); setQty('');
@@ -66,7 +68,7 @@ export function ProductStockWidget({ productId, unite = 'unité' }: Props) {
                 'text-sm font-semibold',
                 Number(item.quantity) === 0 ? 'text-gray-500' : 'text-green-400',
               )}>
-                {Number(item.quantity).toFixed(2)} {unite}
+                {item.quantity} {unite}
               </span>
             </div>
           ))}
@@ -111,7 +113,7 @@ export function ProductStockWidget({ productId, unite = 'unité' }: Props) {
           </div>
           <div>
             <label className="block text-xs text-gray-400 mb-1">Quantité</label>
-            <input type="number" step="0.01" min="0.01" value={qty} onChange={e => setQty(e.target.value)}
+            <input type="number" step="1" min="1" value={qty} onChange={e => setQty(e.target.value)}
               placeholder="0"
               className="w-full bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-white text-xs focus:outline-none focus:border-indigo-500" />
           </div>

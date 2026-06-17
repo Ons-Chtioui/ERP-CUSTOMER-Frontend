@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils';
 const schema = z.object({
   warehouseId: z.coerce.number().positive('Entrepôt requis'),
   componentId: z.coerce.number().positive('Composant requis'),
-  quantity: z.coerce.number().positive('La quantité doit être > 0'),
+  quantity: z.coerce.number().int('La quantité doit être un entier').positive('La quantité doit être > 0'),
   targetWarehouseId: z.coerce.number().optional(),
   referenceDoc: z.string().optional(),
   notes: z.string().optional(),
@@ -144,8 +144,8 @@ export function MovementForm({ onSuccess }: { onSuccess?: () => void }) {
             <input
               {...register('quantity')}
               type="number"
-              step="0.01"
-              placeholder="0.00"
+              step="1"
+              placeholder="0"
               className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-500"
             />
             {errors.quantity && <p className="text-red-400 text-xs mt-1">{errors.quantity.message}</p>}
