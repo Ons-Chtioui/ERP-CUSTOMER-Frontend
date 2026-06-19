@@ -13,7 +13,6 @@ import {
   Bell,
   Shield,
   Layers,
-  Tag,
   ShoppingCart,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -21,19 +20,20 @@ import { useAuth } from '@/hooks/useAuth';
 import { Can } from '@/components/auth/Can';
 
 const NAV = [
-  { href: '/dashboard',       label: 'Dashboard',    icon: LayoutDashboard, permission: null },
-  { href: '/users',           label: 'Utilisateurs', icon: Users,           permission: 'users.view' },
-  { href: '/roles',           label: 'Rôles',        icon: Shield,          permission: 'users.roles' },
-  { href: '/warehouses',      label: 'Entrepôts',    icon: Warehouse,       permission: 'stock.view' },
-  { href: '/components',      label: 'Composants',   icon: Package,         permission: 'stock.view' },
-  { href: '/stock-movements', label: 'Mouvements',   icon: TrendingUp,      permission: 'stock.view' },
-  { href: '/inventory',       label: 'Inventaire',   icon: ClipboardList,   permission: 'stock.inventory' },
-  { href: '/alerts',          label: 'Alertes',      icon: Bell,            permission: 'stock.view' },
-  { href: '/products',        label: 'Produits finis', icon: Layers,        permission: 'bom.view' },
-  { href: '/orders',          label: 'Commandes',      icon: ShoppingCart,  permission: 'orders.view' },
-  { href: '/product-categories', label: 'Catégories',   icon: Tag,           permission: 'bom.view' },
-  { href: '/profile',         label: 'Mon profil',   icon: UserCircle,      permission: null },
+  { href: '/dashboard',       label: 'Dashboard',      icon: LayoutDashboard, permission: null },
+  { href: '/users',           label: 'Utilisateurs',   icon: Users,           permission: 'users.view' },
+  { href: '/roles',           label: 'Rôles',          icon: Shield,          permission: 'users.roles' },
+  { href: '/warehouses',      label: 'Entrepôts',      icon: Warehouse,       permission: 'stock.view' },
+  { href: '/components',      label: 'Composants',     icon: Package,         permission: 'stock.view' },
+  { href: '/stock-movements', label: 'Mouvements',     icon: TrendingUp,      permission: 'stock.view' },
+  { href: '/inventory',       label: 'Inventaire',     icon: ClipboardList,   permission: 'stock.inventory' },
+  { href: '/alerts',          label: 'Alertes',        icon: Bell,            permission: 'stock.view' },
+  { href: '/products',        label: 'Produits finis', icon: Layers,          permission: 'bom.view' },
+  { href: '/clients',         label: 'Clients',         icon: Users,          permission: 'clients.view' },
+  { href: '/orders',          label: 'Commandes',      icon: ShoppingCart,    permission: 'orders.view' },
+  { href: '/profile',         label: 'Mon profil',     icon: UserCircle,      permission: null },
 ];
+  
 
 export function Sidebar() {
   const pathname = usePathname();
