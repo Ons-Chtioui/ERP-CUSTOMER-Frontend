@@ -98,6 +98,8 @@ export interface Order {
   reference: string;
   clientId: string;
   client: Client;
+  warehouseId: string;
+  warehouse?: { id: number; nom: string; code: string };
   status: OrderStatus;
   note?: string | null;
   discount: number;

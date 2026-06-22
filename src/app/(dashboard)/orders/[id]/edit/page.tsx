@@ -4,14 +4,12 @@
  * Page de modification d'une commande en brouillon.
  *
  * Mêmes fonctionnalités que la page de création :
- *  - Lignes avec suppléments (composants additionnels)
- *  - Stock fini / fabricable affiché par ligne
- *
- * Différence : les valeurs sont pré-remplies depuis la commande existante,
- * y compris les suppléments déjà enregistrés sur chaque ligne.
+ *  - Sélection d'entrepôt (pré-remplie depuis la commande)
+ *  - Stock fini / fabricable par entrepôt affiché par ligne
+ *  - Lignes avec suppléments
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   Loader2, ArrowLeft, Trash2, AlertTriangle, Save, ShoppingCart,
@@ -21,10 +19,11 @@ import { cn } from '@/lib/utils';
 import { useOrder, useUpdateOrderLines } from '@/hooks/useOrders';
 import { useClients } from '@/hooks/useClients';
 import { useProducts } from '@/hooks/useProducts';
+import { useWarehouses } from '@/hooks/useWarehouses';
 import { mediaUrl } from '@/lib/media';
 import { SupplementSelector, type DraftSupplement } from '@/components/orders/SupplementSelector';
+import { StockByWarehousePanel, SearchResultStock } from '@/components/orders/StockByWarehousePanel';
 
-// ─── Type interne pour une ligne en cours d'édition ──────────────────────────
 interface DraftLine {
   productId: string;
   nom: string;
@@ -44,7 +43,6 @@ interface DraftLine {
 const TVA = 19;
 const round = (n: number) => Math.round(n * 1000) / 1000;
 
-// ─── Badge de stock compact (identique à la page création) ──────────────────
 function StockBadge({
   stockFini, stockFabricable, quantity,
 }: {
@@ -86,22 +84,36 @@ export default function EditOrderPage() {
 
   const { data: order, isLoading } = useOrder(orderId);
   const { data: clients = [] }     = useClients();
+  const { data: warehouses = [] }  = useWarehouses();
   const updateLines                = useUpdateOrderLines();
 
+  const activeWarehouses    = warehouses.filter((w) => w.isActive);
   const [clientId, setClientId]           = useState('');
+  const [warehouseId, setWarehouseId]     = useState('');
   const [note, setNote]                   = useState('');
   const [discount, setDiscount]           = useState(0);
   const [lines, setLines]                 = useState<DraftLine[]>([]);
   const [productSearch, setProductSearch] = useState('');
   const [error, setError]                 = useState('');
 
-  // withStock: true → récupère stockFini/stockFabricable pour chaque produit
+  const selectedWarehouseId = warehouseId ? Number(warehouseId) : null;
+
   const { data: allProducts = [] } = useProducts({
-    search:    productSearch || undefined,
-    withStock: true,
+    search: productSearch || undefined,
   });
 
-  // ── Pré-remplir depuis la commande existante (y compris suppléments) ──────
+  const updateLineStock = useCallback((productId: string, stock: {
+    stockFini: number; stockFabricable: number; stockTotal: number;
+  }) => {
+    setLines((prev) =>
+      prev.map((l) =>
+        l.productId === productId
+          ? { ...l, stockFini: stock.stockFini, stockFabricable: stock.stockFabricable, stockTotal: stock.stockTotal }
+          : l,
+      ),
+    );
+  }, []);
+
   useEffect(() => {
     if (order) {
       if (order.status !== 'draft') {
@@ -109,6 +121,7 @@ export default function EditOrderPage() {
         return;
       }
       setClientId(order.clientId);
+      setWarehouseId(String(order.warehouseId));
       setNote(order.note ?? '');
       setDiscount(Number(order.discount));
       setLines(order.lines.map((l) => ({
@@ -121,10 +134,9 @@ export default function EditOrderPage() {
         discount:        Number(l.discount),
         tvaRate:         Number(l.tvaRate) || TVA,
         showSupplements: false,
-        stockFini:       0, // rempli dynamiquement si le produit reste dans la liste recherche
+        stockFini:       0,
         stockFabricable: 0,
         stockTotal:      0,
-        // Convertir les suppléments existants (venant du backend) vers le format DraftSupplement
         supplements: (l.supplements ?? []).map((s) => ({
           componentId: s.componentId,
           nom:         s.component?.nom ?? `Composant #${s.componentId}`,
@@ -137,8 +149,8 @@ export default function EditOrderPage() {
     }
   }, [order, orderId, router]);
 
-  // ── Ajouter un produit comme nouvelle ligne ───────────────────────────────
   const addProduct = (p: (typeof allProducts)[0]) => {
+    if (!selectedWarehouseId) { setError('Sélectionnez un entrepôt avant d\'ajouter des produits'); return; }
     if (lines.find((l) => l.productId === String(p.id))) return;
     const price = Number(p.prixVente) > 0 ? Number(p.prixVente) : Number(p.prixVenteAuto);
     setLines((prev) => [
@@ -154,12 +166,13 @@ export default function EditOrderPage() {
         tvaRate:         TVA,
         supplements:     [],
         showSupplements: false,
-        stockFini:       p.stock?.stockFini ?? 0,
-        stockFabricable: p.stock?.stockFabricable ?? 0,
-        stockTotal:      p.stock?.stockTotal ?? 0,
+        stockFini:       0,
+        stockFabricable: 0,
+        stockTotal:      0,
       },
     ]);
     setProductSearch('');
+    setError('');
   };
 
   const updateLine = (productId: string, field: 'quantity' | 'discount', value: number) => {
@@ -186,7 +199,6 @@ export default function EditOrderPage() {
     );
   };
 
-  // ── Calculs ────────────────────────────────────────────────────────────────
   const lineHt = (l: DraftLine) => {
     const productHt = l.quantity * l.unitPrice * (1 - l.discount / 100);
     const suppHt    = l.supplements.reduce((s, sup) => s + sup.quantity * sup.unitPrice, 0);
@@ -197,17 +209,18 @@ export default function EditOrderPage() {
   const totalTva = totalHt * (TVA / 100);
   const totalTtc = totalHt + totalTva;
 
-  // ── Sauvegarder ────────────────────────────────────────────────────────────
   const handleSave = async () => {
     if (!clientId)     { setError('Sélectionnez un client'); return; }
+    if (!warehouseId)  { setError('Sélectionnez un entrepôt'); return; }
     if (!lines.length) { setError('Ajoutez au moins un produit'); return; }
     setError('');
     try {
       await updateLines.mutateAsync({
-        id: orderId,
-        clientId: Number(clientId),
-        note:     note || undefined,
-        discount: discount || undefined,
+        id:          orderId,
+        clientId:    Number(clientId),
+        warehouseId: Number(warehouseId),
+        note:        note || undefined,
+        discount:    discount || undefined,
         lines: lines.map((l) => ({
           productId: Number(l.productId),
           quantity:  l.quantity,
@@ -251,7 +264,6 @@ export default function EditOrderPage() {
 
   return (
     <div className="space-y-6">
-      {/* En-tête */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <button onClick={() => router.back()} className="p-2 hover:bg-gray-800 rounded-lg transition-colors">
@@ -275,24 +287,40 @@ export default function EditOrderPage() {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        {/* ── Colonne principale ── */}
         <div className="xl:col-span-2 space-y-4">
 
-          {/* Client */}
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Client <span className="text-red-400">*</span>
-            </label>
-            <select
-              value={clientId}
-              onChange={(e) => setClientId(e.target.value)}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-500"
-            >
-              <option value="">-- Sélectionner --</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>{c.name} ({c.code})</option>
-              ))}
-            </select>
+          {/* Client + Entrepôt */}
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Client <span className="text-red-400">*</span>
+              </label>
+              <select
+                value={clientId}
+                onChange={(e) => setClientId(e.target.value)}
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-500"
+              >
+                <option value="">-- Sélectionner --</option>
+                {clients.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name} ({c.code})</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Entrepôt <span className="text-red-400">*</span>
+              </label>
+              <select
+                value={warehouseId}
+                onChange={(e) => setWarehouseId(e.target.value)}
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-500"
+              >
+                <option value="">-- Sélectionner --</option>
+                {activeWarehouses.map((w) => (
+                  <option key={w.id} value={w.id}>{w.nom} ({w.code})</option>
+                ))}
+              </select>
+            </div>
           </div>
 
           {/* Lignes */}
@@ -305,7 +333,6 @@ export default function EditOrderPage() {
               <div className="divide-y divide-gray-800">
                 {lines.map((line) => (
                   <div key={line.productId} className="p-4">
-                    {/* Ligne principale */}
                     <div className="flex items-center gap-3">
                       {line.imageUrl ? (
                         <img src={mediaUrl(line.imageUrl)!} alt="" className="w-8 h-8 rounded object-cover border border-gray-700 shrink-0" />
@@ -359,18 +386,19 @@ export default function EditOrderPage() {
                       </div>
                     </div>
 
-                    {/* Stock — affiché seulement si on connaît le stock (produit présent dans la recherche) */}
-                    {line.stockTotal > 0 && (
-                      <div className="mt-2 ml-11">
-                        <StockBadge
-                          stockFini={line.stockFini}
-                          stockFabricable={line.stockFabricable}
-                          quantity={line.quantity}
-                        />
-                      </div>
-                    )}
+                    <div className="mt-2 ml-11 space-y-2">
+                      <StockBadge
+                        stockFini={line.stockFini}
+                        stockFabricable={line.stockFabricable}
+                        quantity={line.quantity}
+                      />
+                      <StockByWarehousePanel
+                        productId={Number(line.productId)}
+                        selectedWarehouseId={selectedWarehouseId}
+                        onWarehouseStock={(stock) => updateLineStock(line.productId, stock)}
+                      />
+                    </div>
 
-                    {/* Accordéon suppléments */}
                     {line.showSupplements && (
                       <div className="mt-3 ml-11">
                         <SupplementSelector
@@ -395,54 +423,52 @@ export default function EditOrderPage() {
               </div>
             )}
 
-            {/* Recherche produit — liste toujours visible */}
+            {/* Recherche produit */}
             <div className="p-4 border-t border-gray-800">
-              <input
-                type="text"
-                value={productSearch}
-                onChange={(e) => setProductSearch(e.target.value)}
-                placeholder="Ajouter un produit..."
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-500 mb-2"
-              />
-              {visibleProducts.length > 0 && (
-                <div className="space-y-1 max-h-64 overflow-y-auto">
-                  {visibleProducts.slice(0, 10).map((p) => {
-                    const price     = Number(p.prixVente) > 0 ? Number(p.prixVente) : Number(p.prixVenteAuto);
-                    const stockFini = p.stock?.stockFini ?? 0;
-                    const stockFab  = p.stock?.stockFabricable ?? 0;
-                    return (
-                      <button
-                        key={p.id}
-                        onClick={() => addProduct(p)}
-                        className="w-full flex items-center justify-between px-3 py-2.5 bg-gray-800 hover:bg-gray-700 rounded-lg text-left transition-colors"
-                      >
-                        <div className="flex-1 min-w-0">
-                          <p className="text-white text-sm">{p.nom}</p>
-                          <p className="text-gray-500 text-xs font-mono">{p.reference}</p>
-                        </div>
-                        <div className="flex items-center gap-4 shrink-0 ml-3">
-                          <div className="text-right text-xs">
-                            <div className="flex items-center gap-1 justify-end">
-                              <Warehouse className="w-3 h-3 text-gray-500" />
-                              <span className={stockFini > 0 ? 'text-green-400 font-mono' : 'text-gray-600 font-mono'}>{stockFini}</span>
+              {!selectedWarehouseId ? (
+                <p className="text-orange-400 text-sm flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  Sélectionnez un entrepôt pour ajouter des produits.
+                </p>
+              ) : (
+                <>
+                  <input
+                    type="text"
+                    value={productSearch}
+                    onChange={(e) => setProductSearch(e.target.value)}
+                    placeholder="Ajouter un produit..."
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-500 mb-2"
+                  />
+                  {visibleProducts.length > 0 && (
+                    <div className="space-y-1 max-h-64 overflow-y-auto">
+                      {visibleProducts.slice(0, 10).map((p) => {
+                        const price = Number(p.prixVente) > 0 ? Number(p.prixVente) : Number(p.prixVenteAuto);
+                        return (
+                          <button
+                            key={p.id}
+                            onClick={() => addProduct(p)}
+                            className="w-full flex items-center justify-between px-3 py-2.5 bg-gray-800 hover:bg-gray-700 rounded-lg text-left transition-colors"
+                          >
+                            <div className="flex-1 min-w-0">
+                              <p className="text-white text-sm">{p.nom}</p>
+                              <p className="text-gray-500 text-xs font-mono">{p.reference}</p>
                             </div>
-                            <div className="flex items-center gap-1 justify-end">
-                              <Wrench className="w-3 h-3 text-gray-500" />
-                              <span className={stockFab > 0 ? 'text-blue-400 font-mono' : 'text-gray-600 font-mono'}>{stockFab}</span>
+                            <div className="flex items-center gap-4 shrink-0 ml-3">
+                              <SearchResultStock productId={p.id} warehouseId={selectedWarehouseId} />
+                              <p className="text-green-400 text-sm font-mono shrink-0 min-w-[60px] text-right">{price.toFixed(3)} DTN</p>
                             </div>
-                          </div>
-                          <p className="text-green-400 text-sm font-mono shrink-0 min-w-[60px] text-right">{price.toFixed(3)} DTN</p>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>
         </div>
 
-        {/* ── Récapitulatif ── */}
+        {/* Récapitulatif */}
         <div className="space-y-4">
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-3">
             <h3 className="text-white font-medium">Récapitulatif</h3>
@@ -482,7 +508,7 @@ export default function EditOrderPage() {
             )}
             <button
               onClick={handleSave}
-              disabled={updateLines.isPending || !lines.length || !clientId}
+              disabled={updateLines.isPending || !lines.length || !clientId || !warehouseId}
               className="w-full flex items-center justify-center gap-2 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors"
             >
               {updateLines.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShoppingCart className="w-4 h-4" />}

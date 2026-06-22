@@ -45,6 +45,7 @@ export const useCreateOrder = () => {
     mutationFn: (data: {
       clientId: number;
       note?: string;
+      warehouseId:number;
       discount?: number;
       lines: {
         productId: number;
@@ -86,6 +87,7 @@ export const useUpdateOrderLines = () => {
     }: {
       id: string;
       clientId?: number;
+      warehouseId?:number;
       note?: string;
       discount?: number;
       lines?: {
@@ -122,3 +124,20 @@ export const useDeleteOrder = () => {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['orders'] }),
   });
 };
+
+export interface WarehouseStock {
+  warehouseId:     number;
+  warehouseName:   string;
+  stockFini:       number;
+  stockFabricable: number;
+  stockTotal:      number;
+}
+ 
+export const useProductStockByWarehouse = (productId: number | null) =>
+  useQuery<WarehouseStock[]>({
+    queryKey: ['orders', 'stock-by-warehouse', productId],
+    queryFn:  () =>
+      api.get<WarehouseStock[]>(`/orders/stock-by-warehouse/${productId}`).then(r => r.data),
+    enabled:  !!productId,
+    staleTime: 60_000, // cache 1 minute
+  });

@@ -3,16 +3,11 @@
 /**
  * Page de création d'une nouvelle commande.
  *
- * Nouveauté : lors de la recherche de produits, on affiche pour chaque résultat :
- *   - Stock fini disponible (unités déjà produites en entrepôt)
- *   - Stock fabricable (unités qu'on peut assembler depuis les composants)
- *   - Total disponible = fini + fabricable
- *   - Un badge coloré : vert (ok), orange (partiel), rouge (rupture)
- *
- * Ces infos viennent du champ `product.stock` retourné par GET /products?withStock=true
+ * Sélection d'entrepôt obligatoire : le stock affiché et déduit
+ * correspond à l'entrepôt choisi (fini + fabricable).
  */
 
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 import {
@@ -24,10 +19,11 @@ import { cn } from '@/lib/utils';
 import { useCreateOrder } from '@/hooks/useOrders';
 import { useClients } from '@/hooks/useClients';
 import { useProducts } from '@/hooks/useProducts';
+import { useWarehouses } from '@/hooks/useWarehouses';
 import { mediaUrl } from '@/lib/media';
 import { SupplementSelector, type DraftSupplement } from '@/components/orders/SupplementSelector';
+import { StockByWarehousePanel, SearchResultStock } from '@/components/orders/StockByWarehousePanel';
 
-// ─── Type interne pour une ligne en cours de saisie ──────────────────────────
 interface DraftLine {
   productId: string;
   nom: string;
@@ -39,7 +35,6 @@ interface DraftLine {
   tvaRate: number;
   supplements: DraftSupplement[];
   showSupplements: boolean;
-  // Stock disponible (rempli depuis product.stock au moment de l'ajout)
   stockFini: number;
   stockFabricable: number;
   stockTotal: number;
@@ -48,8 +43,6 @@ interface DraftLine {
 const TVA = 19;
 const round = (n: number) => Math.round(n * 1000) / 1000;
 
-// ─── Badge de stock ───────────────────────────────────────────────────────────
-// Affiche le stock fini + fabricable avec une couleur selon la disponibilité
 function StockBadge({
   stockFini,
   stockFabricable,
@@ -63,7 +56,6 @@ function StockBadge({
 }) {
   const stockTotal = stockFini + stockFabricable;
   const needed     = quantity ?? 0;
-  // Couleur selon disponibilité par rapport à la quantité demandée
   const color =
     needed === 0
       ? stockTotal > 0 ? 'text-green-400' : 'text-red-400'
@@ -74,7 +66,6 @@ function StockBadge({
       : 'text-red-400';
 
   if (compact) {
-    // Version courte pour la liste de recherche
     return (
       <div className={cn('text-xs font-mono text-right', color)}>
         <div className="flex items-center gap-1 justify-end">
@@ -91,7 +82,6 @@ function StockBadge({
     );
   }
 
-  // Version détaillée pour les lignes déjà ajoutées
   return (
     <div className="flex items-center gap-3 text-xs">
       <div className="flex items-center gap-1 text-gray-400">
@@ -132,23 +122,36 @@ function NewOrderForm() {
   const create       = useCreateOrder();
 
   const [clientId, setClientId]           = useState(searchParams.get('clientId') ?? '');
+  const [warehouseId, setWarehouseId]     = useState('');
   const [note, setNote]                   = useState('');
   const [discount, setDiscount]           = useState(0);
   const [lines, setLines]                 = useState<DraftLine[]>([]);
   const [productSearch, setProductSearch] = useState('');
   const [error, setError]                 = useState('');
 
-  const { data: clients = [] } = useClients();
+  const { data: clients = [] }     = useClients();
+  const { data: warehouses = [] }  = useWarehouses();
+  const activeWarehouses           = warehouses.filter((w) => w.isActive);
+  const selectedWarehouseId        = warehouseId ? Number(warehouseId) : null;
 
-  // withStock: true → le backend retourne product.stock (stockFini, stockFabricable, stockTotal)
-  // pour chaque produit dans la liste
   const { data: allProducts = [] } = useProducts({
-    search:    productSearch || undefined,
-    withStock: true,
+    search: productSearch || undefined,
   });
 
-  // ── Ajouter un produit comme ligne ────────────────────────────────────────
+  const updateLineStock = useCallback((productId: string, stock: {
+    stockFini: number; stockFabricable: number; stockTotal: number;
+  }) => {
+    setLines((prev) =>
+      prev.map((l) =>
+        l.productId === productId
+          ? { ...l, stockFini: stock.stockFini, stockFabricable: stock.stockFabricable, stockTotal: stock.stockTotal }
+          : l,
+      ),
+    );
+  }, []);
+
   const addProduct = (p: (typeof allProducts)[0]) => {
+    if (!selectedWarehouseId) { setError('Sélectionnez un entrepôt avant d\'ajouter des produits'); return; }
     if (lines.find((l) => l.productId === String(p.id))) return;
     const price = Number(p.prixVente) > 0 ? Number(p.prixVente) : Number(p.prixVenteAuto);
     setLines((prev) => [
@@ -164,13 +167,13 @@ function NewOrderForm() {
         tvaRate:         TVA,
         supplements:     [],
         showSupplements: false,
-        // On stocke le stock au moment de l'ajout
-        stockFini:       p.stock?.stockFini ?? 0,
-        stockFabricable: p.stock?.stockFabricable ?? 0,
-        stockTotal:      p.stock?.stockTotal ?? 0,
+        stockFini:       0,
+        stockFabricable: 0,
+        stockTotal:      0,
       },
     ]);
     setProductSearch('');
+    setError('');
   };
 
   const updateLine = (productId: string, field: 'quantity' | 'discount', value: number) => {
@@ -197,7 +200,6 @@ function NewOrderForm() {
     );
   };
 
-  // ── Calculs totaux ────────────────────────────────────────────────────────
   const lineHt = (l: DraftLine) => {
     const productHt = l.quantity * l.unitPrice * (1 - l.discount / 100);
     const suppHt    = l.supplements.reduce((s, sup) => s + sup.quantity * sup.unitPrice, 0);
@@ -208,16 +210,17 @@ function NewOrderForm() {
   const totalTvaRaw = totalHtRaw * (TVA / 100);
   const totalTtcRaw = totalHtRaw + totalTvaRaw;
 
-  // ── Soumettre ─────────────────────────────────────────────────────────────
   const handleSubmit = async () => {
-    if (!clientId)     { setError('Sélectionnez un client'); return; }
-    if (!lines.length) { setError('Ajoutez au moins un produit'); return; }
+    if (!clientId)       { setError('Sélectionnez un client'); return; }
+    if (!warehouseId)    { setError('Sélectionnez un entrepôt'); return; }
+    if (!lines.length)   { setError('Ajoutez au moins un produit'); return; }
     setError('');
     try {
       const order = await create.mutateAsync({
-        clientId: Number(clientId),
-        note:     note || undefined,
-        discount: discount || undefined,
+        clientId:    Number(clientId),
+        warehouseId: Number(warehouseId),
+        note:        note || undefined,
+        discount:    discount || undefined,
         lines: lines.map((l) => ({
           productId: Number(l.productId),
           quantity:  l.quantity,
@@ -241,14 +244,12 @@ function NewOrderForm() {
     }
   };
 
-  // Produits visibles dans la recherche (exclure déjà ajoutés + inactifs)
   const visibleProducts = allProducts.filter(
     (p) => !lines.find((l) => l.productId === String(p.id)) && p.isActive,
   );
 
   return (
     <div className="space-y-6">
-      {/* En-tête */}
       <div className="flex items-center gap-4">
         <button onClick={() => router.back()} className="p-2 hover:bg-gray-800 rounded-lg transition-colors">
           <ArrowLeft className="w-5 h-5 text-gray-400" />
@@ -260,24 +261,43 @@ function NewOrderForm() {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        {/* ── Colonne principale ── */}
         <div className="xl:col-span-2 space-y-5">
 
-          {/* Client */}
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Client <span className="text-red-400">*</span>
-            </label>
-            <select
-              value={clientId}
-              onChange={(e) => setClientId(e.target.value)}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-500"
-            >
-              <option value="">-- Sélectionner un client --</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>{c.name} ({c.code})</option>
-              ))}
-            </select>
+          {/* Client + Entrepôt */}
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Client <span className="text-red-400">*</span>
+              </label>
+              <select
+                value={clientId}
+                onChange={(e) => setClientId(e.target.value)}
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-500"
+              >
+                <option value="">-- Sélectionner un client --</option>
+                {clients.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name} ({c.code})</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Entrepôt <span className="text-red-400">*</span>
+              </label>
+              <select
+                value={warehouseId}
+                onChange={(e) => setWarehouseId(e.target.value)}
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-500"
+              >
+                <option value="">-- Sélectionner un entrepôt --</option>
+                {activeWarehouses.map((w) => (
+                  <option key={w.id} value={w.id}>{w.nom} ({w.code})</option>
+                ))}
+              </select>
+              <p className="text-gray-600 text-xs mt-1">
+                Le stock affiché et déduit à la confirmation provient de cet entrepôt.
+              </p>
+            </div>
           </div>
 
           {/* Lignes */}
@@ -291,9 +311,7 @@ function NewOrderForm() {
               <div className="divide-y divide-gray-800">
                 {lines.map((line) => (
                   <div key={line.productId} className="p-4">
-                    {/* Ligne principale */}
                     <div className="flex items-center gap-3">
-                      {/* Image */}
                       {line.imageUrl ? (
                         <img src={mediaUrl(line.imageUrl)!} alt="" className="w-8 h-8 rounded object-cover border border-gray-700 shrink-0" />
                       ) : (
@@ -301,17 +319,14 @@ function NewOrderForm() {
                           <Package className="w-3.5 h-3.5 text-gray-600" />
                         </div>
                       )}
-                      {/* Nom */}
                       <div className="flex-1 min-w-0">
                         <p className="text-white text-sm font-medium truncate">{line.nom}</p>
                         <p className="text-gray-500 text-xs font-mono">{line.reference}</p>
                       </div>
-                      {/* P.U. */}
                       <div className="text-right shrink-0">
                         <p className="text-gray-400 text-xs">P.U.</p>
                         <p className="text-gray-300 text-sm font-mono">{line.unitPrice.toFixed(3)}</p>
                       </div>
-                      {/* Qté */}
                       <div className="shrink-0">
                         <p className="text-gray-400 text-xs mb-1 text-center">Qté</p>
                         <input
@@ -320,7 +335,6 @@ function NewOrderForm() {
                           className="w-20 text-center bg-gray-800 border border-gray-700 rounded px-2 py-1 text-white text-sm focus:outline-none focus:border-indigo-500"
                         />
                       </div>
-                      {/* Remise */}
                       <div className="shrink-0">
                         <p className="text-gray-400 text-xs mb-1 text-center">Remise%</p>
                         <input
@@ -329,12 +343,10 @@ function NewOrderForm() {
                           className="w-16 text-center bg-gray-800 border border-gray-700 rounded px-2 py-1 text-white text-sm focus:outline-none focus:border-indigo-500"
                         />
                       </div>
-                      {/* Total HT */}
                       <div className="text-right shrink-0 min-w-[70px]">
                         <p className="text-gray-400 text-xs">Total HT</p>
                         <p className="text-white text-sm font-mono">{round(lineHt(line)).toFixed(3)}</p>
                       </div>
-                      {/* Actions */}
                       <div className="flex items-center gap-1 shrink-0">
                         <button
                           onClick={() => toggleSupplements(line.productId)}
@@ -352,20 +364,19 @@ function NewOrderForm() {
                       </div>
                     </div>
 
-                    {/* ── Infos stock de la ligne ──────────────────────────────
-                     * Affiche en temps réel le stock fini et fabricable.
-                     * La couleur change selon si la quantité demandée est disponible.
-                     * stockTotal = stockFini + stockFabricable
-                     */}
-                    <div className="mt-2 ml-11">
+                    <div className="mt-2 ml-11 space-y-2">
                       <StockBadge
                         stockFini={line.stockFini}
                         stockFabricable={line.stockFabricable}
                         quantity={line.quantity}
                       />
+                      <StockByWarehousePanel
+                        productId={Number(line.productId)}
+                        selectedWarehouseId={selectedWarehouseId}
+                        onWarehouseStock={(stock) => updateLineStock(line.productId, stock)}
+                      />
                     </div>
 
-                    {/* Accordéon suppléments */}
                     {line.showSupplements && (
                       <div className="mt-3 ml-11">
                         <SupplementSelector
@@ -390,109 +401,71 @@ function NewOrderForm() {
               </div>
             )}
 
-            {/* ── Recherche produit ── */}
+            {/* Recherche produit */}
             <div className="p-4 border-t border-gray-800">
-              <input
-                type="text"
-                value={productSearch}
-                onChange={(e) => setProductSearch(e.target.value)}
-                placeholder="Rechercher un produit à ajouter..."
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-500 mb-2"
-              />
+              {!selectedWarehouseId ? (
+                <p className="text-orange-400 text-sm flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  Sélectionnez un entrepôt pour rechercher et ajouter des produits.
+                </p>
+              ) : (
+                <>
+                  <input
+                    type="text"
+                    value={productSearch}
+                    onChange={(e) => setProductSearch(e.target.value)}
+                    placeholder="Rechercher un produit à ajouter..."
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-500 mb-2"
+                  />
 
-              {/* ── Résultats de recherche avec stock ──────────────────────────
-               * Chaque résultat affiche :
-               *  - Nom + référence + prix
-               *  - Icône entrepôt : stock fini (unités déjà en entrepôt)
-               *  - Icône clé : stock fabricable (unités assemblables depuis composants)
-               *  - Couleur verte si stock > 0, rouge si rupture totale
-               */}
-              {visibleProducts.length > 0 && (
-                <div className="space-y-1 max-h-64 overflow-y-auto">
-                  {visibleProducts.slice(0, 10).map((p) => {
-                    const price     = Number(p.prixVente) > 0 ? Number(p.prixVente) : Number(p.prixVenteAuto);
-                    const stockFini = p.stock?.stockFini ?? 0;
-                    const stockFab  = p.stock?.stockFabricable ?? 0;
-                    const stockTot  = p.stock?.stockTotal ?? (stockFini + stockFab);
-                    const hasStock  = stockTot > 0;
-
-                    return (
-                      <button
-                        key={p.id}
-                        onClick={() => addProduct(p)}
-                        className="w-full flex items-center justify-between px-3 py-2.5 bg-gray-800 hover:bg-gray-700 rounded-lg text-left transition-colors border border-transparent hover:border-gray-600"
-                      >
-                        {/* Nom + référence */}
-                        <div className="flex-1 min-w-0">
-                          <p className="text-white text-sm">{p.nom}</p>
-                          <p className="text-gray-500 text-xs font-mono">{p.reference}</p>
-                        </div>
-
-                        {/* Colonne stock + prix */}
-                        <div className="flex items-center gap-4 shrink-0 ml-3">
-                          {/* Infos stock : fini + fabricable */}
-                          <div className="text-right">
-                            {/* Stock fini : unités physiquement disponibles en entrepôt */}
-                            <div className="flex items-center gap-1 justify-end">
-                              <Warehouse className="w-3 h-3 text-gray-500" />
-                              <span className={cn(
-                                'text-xs font-mono',
-                                stockFini > 0 ? 'text-green-400' : 'text-gray-600',
-                              )}>
-                                {stockFini}
-                              </span>
-                              <span className="text-gray-600 text-xs">finis</span>
+                  {visibleProducts.length > 0 && (
+                    <div className="space-y-1 max-h-64 overflow-y-auto">
+                      {visibleProducts.slice(0, 10).map((p) => {
+                        const price = Number(p.prixVente) > 0 ? Number(p.prixVente) : Number(p.prixVenteAuto);
+                        return (
+                          <button
+                            key={p.id}
+                            onClick={() => addProduct(p)}
+                            className="w-full flex items-center justify-between px-3 py-2.5 bg-gray-800 hover:bg-gray-700 rounded-lg text-left transition-colors border border-transparent hover:border-gray-600"
+                          >
+                            <div className="flex-1 min-w-0">
+                              <p className="text-white text-sm">{p.nom}</p>
+                              <p className="text-gray-500 text-xs font-mono">{p.reference}</p>
                             </div>
-                            {/* Stock fabricable : calculé depuis les composants BOM */}
-                            <div className="flex items-center gap-1 justify-end">
-                              <Wrench className="w-3 h-3 text-gray-500" />
-                              <span className={cn(
-                                'text-xs font-mono',
-                                stockFab > 0 ? 'text-blue-400' : 'text-gray-600',
-                              )}>
-                                {stockFab}
-                              </span>
-                              <span className="text-gray-600 text-xs">fabric.</span>
+                            <div className="flex items-center gap-4 shrink-0 ml-3">
+                              <SearchResultStock productId={p.id} warehouseId={selectedWarehouseId} />
+                              <div className="text-right min-w-[70px]">
+                                <p className="text-green-400 text-sm font-mono">{price.toFixed(3)}</p>
+                                <p className="text-gray-500 text-xs">DTN</p>
+                              </div>
                             </div>
-                            {/* Indicateur rupture totale */}
-                            {!hasStock && (
-                              <span className="text-red-400 text-xs">Rupture</span>
-                            )}
-                          </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
 
-                          {/* Prix */}
-                          <div className="text-right min-w-[70px]">
-                            <p className="text-green-400 text-sm font-mono">{price.toFixed(3)}</p>
-                            <p className="text-gray-500 text-xs">DTN</p>
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Légende des icônes stock */}
-              {visibleProducts.length > 0 && (
-                <div className="mt-2 flex items-center gap-4 text-xs text-gray-600">
-                  <span className="flex items-center gap-1">
-                    <Warehouse className="w-3 h-3" /> Stock fini (entrepôt)
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Wrench className="w-3 h-3" /> Fabricable (composants)
-                  </span>
-                </div>
+                  {visibleProducts.length > 0 && (
+                    <div className="mt-2 flex items-center gap-4 text-xs text-gray-600">
+                      <span className="flex items-center gap-1">
+                        <Warehouse className="w-3 h-3" /> Stock fini (entrepôt sélectionné)
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Wrench className="w-3 h-3" /> Fabricable (composants)
+                      </span>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>
         </div>
 
-        {/* ── Colonne récapitulatif ── */}
+        {/* Récapitulatif */}
         <div className="space-y-4">
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-3">
             <h3 className="text-white font-medium">Récapitulatif</h3>
 
-            {/* Remise globale */}
             <div>
               <label className="block text-xs text-gray-400 mb-1">Remise globale (%)</label>
               <input
@@ -502,7 +475,6 @@ function NewOrderForm() {
               />
             </div>
 
-            {/* Totaux */}
             <div className="space-y-2 text-sm pt-2 border-t border-gray-800">
               <div className="flex justify-between text-gray-400">
                 <span>Total HT</span>
@@ -518,8 +490,7 @@ function NewOrderForm() {
               </div>
             </div>
 
-            {/* Résumé disponibilité des lignes */}
-            {lines.length > 0 && (
+            {lines.length > 0 && selectedWarehouseId && (
               <div className="pt-2 border-t border-gray-800 space-y-1">
                 <p className="text-gray-500 text-xs uppercase tracking-wider">Disponibilité</p>
                 {lines.map((l) => {
@@ -536,7 +507,6 @@ function NewOrderForm() {
               </div>
             )}
 
-            {/* Note */}
             <div>
               <label className="block text-xs text-gray-400 mb-1">Note</label>
               <textarea
@@ -554,7 +524,7 @@ function NewOrderForm() {
 
             <button
               onClick={handleSubmit}
-              disabled={create.isPending || lines.length === 0 || !clientId}
+              disabled={create.isPending || lines.length === 0 || !clientId || !warehouseId}
               className="w-full flex items-center justify-center gap-2 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors"
             >
               {create.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShoppingCart className="w-4 h-4" />}
