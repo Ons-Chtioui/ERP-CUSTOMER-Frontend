@@ -14,6 +14,9 @@ import {
   Shield,
   Layers,
   ShoppingCart,
+  FileText,
+  Receipt,
+  Truck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
@@ -31,6 +34,9 @@ const NAV = [
   { href: '/products',        label: 'Produits finis', icon: Layers,          permission: 'bom.view' },
   { href: '/clients',         label: 'Clients',         icon: Users,          permission: 'clients.view' },
   { href: '/orders',          label: 'Commandes',      icon: ShoppingCart,    permission: 'orders.view' },
+  { href: '/quotes',          label: 'Devis',          icon: FileText,        permission: 'quotes.view' },
+  { href: '/invoices',        label: 'Factures',       icon: Receipt,         permission: 'invoices.view' },
+  { href: '/delivery-notes',  label: 'Livraisons',     icon: Truck,           permission: 'delivery.view' },
   { href: '/profile',         label: 'Mon profil',     icon: UserCircle,      permission: null },
 ];
   
