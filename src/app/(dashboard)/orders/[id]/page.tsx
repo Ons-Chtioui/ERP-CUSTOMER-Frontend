@@ -18,11 +18,12 @@ import Link from 'next/link';
 import {
   Loader2, ArrowLeft, CheckCircle, XCircle, Truck,
   Package, AlertTriangle, Clock, User, MessageSquare, Edit,
-  ChevronDown, ChevronUp, Layers,
+  ChevronDown, ChevronUp, Layers, Download,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useOrder, useUpdateOrderStatus, useCheckOrderAvailability } from '@/hooks/useOrders';
 import { Can } from '@/components/auth/Can';
+import { downloadPdf, pdfPaths } from '@/lib/documents';
 import {
   ORDER_STATUS_LABELS, ORDER_STATUS_COLORS, NEXT_STATUSES, type OrderStatus,
 } from '@/types/orders';
@@ -152,6 +153,15 @@ export default function OrderDetailPage() {
               </span>
             </div>
           </div>
+        </div>
+
+        <div className="flex gap-2 flex-wrap">
+          <button
+            onClick={() => downloadPdf(pdfPaths.order(orderId), `${order.reference}.pdf`)}
+            className="flex items-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm rounded-lg"
+          >
+            <Download className="w-4 h-4" /> PDF
+          </button>
         </div>
 
         {/* Boutons d'action statut */}
@@ -546,6 +556,26 @@ export default function OrderDetailPage() {
                     )}
                     {h.comment && (
                       <p className="text-gray-500 mt-0.5 pl-1 italic">"{h.comment}"</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Historique des modifications */}
+          {order.modifications && order.modifications.length > 0 && (
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+              <p className="text-gray-400 text-xs uppercase tracking-wider mb-3">Modifications</p>
+              <div className="space-y-2">
+                {order.modifications.map(m => (
+                  <div key={m.id} className="text-xs text-gray-400">
+                    <span className="text-white">{m.action}</span>
+                    {' · '}
+                    {new Date(m.createdAt).toLocaleString('fr-TN')}
+                    {m.user && ` · ${m.user.prenom} ${m.user.nom}`}
+                    {m.details && (
+                      <p className="text-gray-500 mt-0.5 pl-1">{m.details}</p>
                     )}
                   </div>
                 ))}
