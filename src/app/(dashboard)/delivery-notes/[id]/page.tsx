@@ -3,11 +3,12 @@
 import { useParams, useRouter } from 'next/navigation';
 import { useState } from 'react';
 import Link from 'next/link';
-import { Loader2, ArrowLeft, User, Clock, Truck, CheckCircle, Trash2 } from 'lucide-react';
+import { Loader2, ArrowLeft, User, Clock, Truck, CheckCircle, Trash2, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Can } from '@/components/auth/Can';
 import { useDeliveryNote, useMarkDelivered, useDeleteDeliveryNote } from '@/hooks/useDeliveryNotes';
 import { DELIVERY_STATUS_LABELS, DELIVERY_STATUS_COLORS } from '@/types/commercial';
+import { downloadPdf, pdfPaths } from '@/lib/documents';
 
 export default function DeliveryNoteDetailPage() {
   const router = useRouter();
@@ -77,6 +78,10 @@ export default function DeliveryNoteDetailPage() {
         </div>
 
         <div className="flex gap-2">
+          <button onClick={() => downloadPdf(pdfPaths.deliveryNote(dnId), `${dn.reference}.pdf`)}
+            className="flex items-center gap-1.5 px-3 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm rounded-lg">
+            <Download className="w-4 h-4" /> PDF
+          </button>
           {dn.status === 'pending' && (
             <Can permission="delivery.delete">
               <button onClick={handleDelete} className="flex items-center gap-1.5 px-3 py-2 bg-red-900/40 text-red-400 text-sm rounded-lg">

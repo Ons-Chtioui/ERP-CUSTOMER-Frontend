@@ -4,13 +4,14 @@ import { useParams, useRouter } from 'next/navigation';
 import { useState } from 'react';
 import Link from 'next/link';
 import {
-  Loader2, ArrowLeft, User, Clock, FileText, ArrowRightLeft, Trash2,
+  Loader2, ArrowLeft, User, Clock, FileText, ArrowRightLeft, Trash2, Download, Mail,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Can } from '@/components/auth/Can';
 import {
-  useQuote, useUpdateQuoteStatus, useConvertQuote, useDeleteQuote,
+  useQuote, useUpdateQuoteStatus, useConvertQuote, useDeleteQuote, useSendQuote,
 } from '@/hooks/useQuotes';
+import { downloadPdf, pdfPaths } from '@/lib/documents';
 import {
   QUOTE_STATUS_LABELS, QUOTE_STATUS_COLORS, QUOTE_NEXT_STATUSES, type QuoteStatus,
 } from '@/types/commercial';
@@ -31,6 +32,7 @@ export default function QuoteDetailPage() {
   const updateStatus = useUpdateQuoteStatus();
   const convertQuote = useConvertQuote();
   const deleteQuote  = useDeleteQuote();
+  const sendQuote    = useSendQuote();
 
   const [pendingStatus, setPending] = useState<QuoteStatus | null>(null);
   const [comment, setComment] = useState('');
@@ -40,7 +42,7 @@ export default function QuoteDetailPage() {
   if (!quote) return <div className="text-center py-16 text-gray-400">Devis introuvable</div>;
 
   const nextStatuses = QUOTE_NEXT_STATUSES[quote.status];
-  const canConvert = !['draft', 'refused', 'expired', 'converted'].includes(quote.status);
+  const canConvert = quote.status === 'accepted';
 
   const handleStatusChange = async (status: QuoteStatus) => {
     setError('');
@@ -99,7 +101,17 @@ export default function QuoteDetailPage() {
           </div>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <button onClick={() => downloadPdf(pdfPaths.quote(quoteId), `${quote.reference}.pdf`)}
+            className="flex items-center gap-1.5 px-3 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm rounded-lg">
+            <Download className="w-4 h-4" /> PDF
+          </button>
+          <Can permission="quotes.edit">
+            <button onClick={() => sendQuote.mutateAsync(quoteId)} disabled={sendQuote.isPending}
+              className="flex items-center gap-1.5 px-3 py-2 bg-blue-900/50 hover:bg-blue-900/70 text-blue-400 text-sm rounded-lg">
+              <Mail className="w-4 h-4" /> Envoyer par email
+            </button>
+          </Can>
           {quote.status === 'draft' && (
             <Can permission="quotes.delete">
               <button onClick={handleDelete} disabled={deleteQuote.isPending}
@@ -127,6 +139,12 @@ export default function QuoteDetailPage() {
       </div>
 
       {error && <div className="bg-red-900/30 border border-red-800 text-red-400 px-4 py-3 rounded-lg text-sm">{error}</div>}
+
+      {quote.status === 'sent' && (
+        <div className="bg-blue-900/20 border border-blue-800/50 text-blue-400 px-4 py-3 rounded-lg text-sm flex items-center gap-2">
+          <span>ℹ</span> Le devis doit être <strong className="mx-1">accepté</strong> par le client avant conversion en facture.
+        </div>
+      )}
 
       {nextStatuses.length > 0 && (
         <Can permission="quotes.edit">

@@ -28,13 +28,16 @@ export const QUOTE_STATUS_COLORS: Record<QuoteStatus, string> = {
   converted: 'bg-indigo-900/50 text-indigo-400',
 };
 
+// Transitions manuelles de statut (boutons d'action dans l'UI).
+// La conversion accepted → converted se fait via le bouton dédié "Convertir en facture",
+// pas via ce tableau — c'est intentionnel pour séparer les deux actions.
 export const QUOTE_NEXT_STATUSES: Record<QuoteStatus, QuoteStatus[]> = {
   draft:     ['sent', 'refused'],
   sent:      ['accepted', 'refused', 'expired'],
-  accepted:  [],
+  accepted:  ['refused'],   // peut encore être refusé manuellement même si accepté
   refused:   [],
   expired:   [],
-  converted: [],
+  converted: [],            // état final : aucune transition possible
 };
 
 export interface QuoteLine {

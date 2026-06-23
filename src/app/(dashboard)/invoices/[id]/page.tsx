@@ -4,7 +4,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useState } from 'react';
 import Link from 'next/link';
 import {
-  Loader2, ArrowLeft, User, Clock, Receipt, Send, CreditCard, Ban, FileMinus,
+  Loader2, ArrowLeft, User, Clock, Receipt, Send, CreditCard, Ban, FileMinus, Download,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Can } from '@/components/auth/Can';
@@ -14,6 +14,7 @@ import {
 import {
   INVOICE_STATUS_LABELS, INVOICE_STATUS_COLORS, PAYMENT_METHOD_LABELS, type PaymentMethod,
 } from '@/types/commercial';
+import { downloadPdf, pdfPaths } from '@/lib/documents';
 
 export default function InvoiceDetailPage() {
   const router = useRouter();
@@ -120,8 +121,12 @@ export default function InvoiceDetailPage() {
           </div>
         </div>
 
-        {!isCreditNote && (
+        {!isCreditNote ? (
           <div className="flex flex-wrap gap-2 justify-end">
+            <button onClick={() => downloadPdf(pdfPaths.invoice(invoiceId), `${invoice.reference}.pdf`)}
+              className="flex items-center gap-1.5 px-3 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm rounded-lg">
+              <Download className="w-4 h-4" /> PDF
+            </button>
             {invoice.status === 'draft' && (
               <Can permission="invoices.edit">
                 <button onClick={handleSend} disabled={markSent.isPending}
@@ -155,6 +160,11 @@ export default function InvoiceDetailPage() {
               </Can>
             )}
           </div>
+        ) : (
+          <button onClick={() => downloadPdf(pdfPaths.invoice(invoiceId), `${invoice.reference}.pdf`)}
+            className="flex items-center gap-1.5 px-3 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm rounded-lg">
+            <Download className="w-4 h-4" /> PDF Avoir
+          </button>
         )}
       </div>
 
@@ -177,6 +187,28 @@ export default function InvoiceDetailPage() {
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
             <p className="text-gray-400 text-xs">Paiements</p>
             <p className="text-white font-bold">{invoice.payments?.length ?? 0}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Barre de progression du paiement */}
+      {!isCreditNote && Number(invoice.totalTtc) > 0 && (
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+          <div className="flex items-center justify-between text-xs text-gray-400 mb-2">
+            <span>Progression du paiement</span>
+            <span className="font-mono text-white">
+              {Math.min(100, (Number(invoice.amountPaid) / Number(invoice.totalTtc)) * 100).toFixed(1)}%
+            </span>
+          </div>
+          <div className="w-full bg-gray-800 rounded-full h-3 overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all duration-500 bg-green-500"
+              style={{ width: `${Math.min(100, (Number(invoice.amountPaid) / Number(invoice.totalTtc)) * 100)}%` }}
+            />
+          </div>
+          <div className="flex justify-between text-xs text-gray-500 mt-1">
+            <span className="text-green-400 font-mono">{Number(invoice.amountPaid).toFixed(3)} payé</span>
+            <span className="text-orange-400 font-mono">{restant.toFixed(3)} restant</span>
           </div>
         </div>
       )}

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
-import { Loader2, ArrowLeft, Trash2, Receipt, Plus } from 'lucide-react';
+import { Loader2, ArrowLeft, Trash2, Receipt, Plus, Package, Warehouse, Wrench } from 'lucide-react';
 import { useCreateInvoice } from '@/hooks/useInvoices';
 import { useClients } from '@/hooks/useClients';
 import { useProducts } from '@/hooks/useProducts';
@@ -11,6 +11,7 @@ import { useProducts } from '@/hooks/useProducts';
 interface DraftLine {
   productId: string;
   nom: string;
+  reference: string;
   description: string;
   unitPrice: number;
   quantity: number;
@@ -24,35 +25,33 @@ const round = (n: number) => Math.round(n * 1000) / 1000;
 function NewInvoiceForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const prefillClient = searchParams.get('clientId') ?? '';
-
   const createInvoice = useCreateInvoice();
   const { data: clients = [] } = useClients();
-  const { data: products = [] } = useProducts();
+  const { data: allProducts = [] } = useProducts({ withStock: true });
 
-  const [clientId, setClientId] = useState(prefillClient);
-  const [dueDate, setDueDate] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 30);
+  const [clientId, setClientId]     = useState(searchParams.get('clientId') ?? '');
+  const [dueDate, setDueDate]       = useState(() => {
+    const d = new Date(); d.setDate(d.getDate() + 30);
     return d.toISOString().split('T')[0];
   });
-  const [note, setNote] = useState('');
+  const [note, setNote]             = useState('');
   const [globalDiscount, setGlobalDiscount] = useState(0);
-  const [lines, setLines] = useState<DraftLine[]>([]);
+  const [lines, setLines]           = useState<DraftLine[]>([]);
   const [productSearch, setProductSearch] = useState('');
-  const [error, setError] = useState('');
+  const [error, setError]           = useState('');
 
-  const addProduct = (productId: string) => {
-    const p = products.find(x => String(x.id) === productId);
-    if (!p) return;
+  const addProduct = (p: (typeof allProducts)[0]) => {
+    if (lines.some(l => l.productId === String(p.id))) return;
+    const price = Number(p.prixVente) > 0 ? Number(p.prixVente) : Number(p.prixVenteAuto);
     setLines(prev => [...prev, {
-      productId,
-      nom: p.nom,
+      productId:   String(p.id),
+      nom:         p.nom,
+      reference:   p.reference,
       description: p.nom,
-      unitPrice: Number(p.prixVente ?? 0),
-      quantity: 1,
-      discount: 0,
-      tvaRate: TVA,
+      unitPrice:   price,
+      quantity:    1,
+      discount:    0,
+      tvaRate:     TVA,
     }]);
     setProductSearch('');
   };
@@ -60,41 +59,39 @@ function NewInvoiceForm() {
   const updateLine = (idx: number, field: keyof DraftLine, value: number | string) => {
     setLines(prev => prev.map((l, i) => i === idx ? { ...l, [field]: value } : l));
   };
-
   const removeLine = (idx: number) => setLines(prev => prev.filter((_, i) => i !== idx));
 
-  const lineTotals = lines.map(l => {
-    const ht = l.quantity * l.unitPrice * (1 - l.discount / 100);
-    return round(ht);
-  });
-  const subHt = round(lineTotals.reduce((s, t) => s + t, 0));
-  const factor = 1 - globalDiscount / 100;
-  const totalHt = round(subHt * factor);
-  const totalTva = round(lines.reduce((s, l, i) => s + lineTotals[i] * (l.tvaRate / 100) * factor, 0));
-  const totalTtc = round(totalHt + totalTva);
+  const lineTotals = lines.map(l => round(l.quantity * l.unitPrice * (1 - l.discount / 100)));
+  const factor     = 1 - globalDiscount / 100;
+  const totalHt    = round(lineTotals.reduce((s, t) => s + t, 0) * factor);
+  const totalTva   = round(lines.reduce((s, l, i) => s + lineTotals[i] * (l.tvaRate / 100), 0) * factor);
+  const totalTtc   = round(totalHt + totalTva);
 
-  const filteredProducts = products.filter(p =>
-    p.nom.toLowerCase().includes(productSearch.toLowerCase()) ||
-    p.reference.toLowerCase().includes(productSearch.toLowerCase()),
+  const visibleProducts = allProducts.filter(p =>
+    !lines.some(l => l.productId === String(p.id)) &&
+    p.isActive &&
+    (!productSearch ||
+      p.nom.toLowerCase().includes(productSearch.toLowerCase()) ||
+      p.reference.toLowerCase().includes(productSearch.toLowerCase())),
   );
 
   const handleSubmit = async () => {
     setError('');
-    if (!clientId) { setError('Sélectionnez un client'); return; }
-    if (lines.length === 0) { setError('Ajoutez au moins une ligne'); return; }
+    if (!clientId)     { setError('Sélectionnez un client'); return; }
+    if (!lines.length) { setError('Ajoutez au moins une ligne'); return; }
     try {
       const invoice = await createInvoice.mutateAsync({
         clientId: Number(clientId),
         dueDate,
-        note: note || undefined,
+        note:     note || undefined,
         discount: globalDiscount || undefined,
         lines: lines.map(l => ({
-          productId: l.productId ? Number(l.productId) : undefined,
+          productId:   l.productId ? Number(l.productId) : undefined,
           description: l.description,
-          quantity: l.quantity,
-          unitPrice: l.unitPrice,
-          discount: l.discount || undefined,
-          tvaRate: l.tvaRate,
+          quantity:    l.quantity,
+          unitPrice:   l.unitPrice,
+          discount:    l.discount || undefined,
+          tvaRate:     l.tvaRate,
         })),
       });
       router.push(`/invoices/${invoice.id}`);
@@ -112,7 +109,7 @@ function NewInvoiceForm() {
         </button>
         <div>
           <h1 className="text-2xl font-semibold text-white">Nouvelle facture</h1>
-          <p className="text-gray-400 text-sm">Création manuelle d&apos;une facture</p>
+          <p className="text-gray-400 text-sm">La référence est générée automatiquement</p>
         </div>
       </div>
 
@@ -123,7 +120,7 @@ function NewInvoiceForm() {
           <div>
             <label className="block text-xs text-gray-400 mb-1">Client *</label>
             <select value={clientId} onChange={e => setClientId(e.target.value)}
-              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm">
+              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500">
               <option value="">— Sélectionner —</option>
               {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
@@ -131,79 +128,77 @@ function NewInvoiceForm() {
           <div>
             <label className="block text-xs text-gray-400 mb-1">Date d&apos;échéance</label>
             <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
-              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm" />
+              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500" />
           </div>
           <div>
             <label className="block text-xs text-gray-400 mb-1">Remise globale (%)</label>
             <input type="number" min={0} max={100} value={globalDiscount}
               onChange={e => setGlobalDiscount(Number(e.target.value))}
-              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm" />
+              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500" />
           </div>
         </div>
         <div>
           <label className="block text-xs text-gray-400 mb-1">Note</label>
           <textarea value={note} onChange={e => setNote(e.target.value)} rows={2}
-            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm resize-none" />
+            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm resize-none focus:outline-none focus:border-indigo-500" />
         </div>
       </div>
 
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-4">
-        <h2 className="text-white font-medium flex items-center gap-2"><Receipt className="w-4 h-4" /> Lignes</h2>
-        <div className="relative">
-          <input value={productSearch} onChange={e => setProductSearch(e.target.value)}
-            placeholder="Rechercher un produit..."
-            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm" />
-          {productSearch && filteredProducts.length > 0 && (
-            <div className="absolute z-10 w-full mt-1 bg-gray-800 border border-gray-700 rounded-lg shadow-xl max-h-48 overflow-y-auto">
-              {filteredProducts.slice(0, 8).map(p => (
-                <button key={p.id} onClick={() => addProduct(String(p.id))}
-                  className="w-full text-left px-3 py-2 hover:bg-gray-700 text-sm text-white flex justify-between">
-                  <span>{p.nom}</span>
-                  <span className="text-gray-400 font-mono text-xs">{p.reference}</span>
-                </button>
-              ))}
-            </div>
-          )}
+      <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-800 flex items-center justify-between">
+          <h2 className="text-white font-medium flex items-center gap-2">
+            <Receipt className="w-4 h-4 text-indigo-400" /> Lignes de facture
+          </h2>
+          <span className="text-gray-500 text-xs">{lines.length} ligne(s)</span>
         </div>
 
         {lines.length > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead>
+              <thead className="bg-gray-800/50">
                 <tr className="text-gray-400 text-xs">
-                  <th className="text-left py-2 px-2">Description</th>
-                  <th className="text-right py-2 px-2">P.U.</th>
-                  <th className="text-right py-2 px-2">Qté</th>
-                  <th className="text-right py-2 px-2">Rem.%</th>
-                  <th className="text-right py-2 px-2">Total HT</th>
-                  <th className="py-2 px-2"></th>
+                  <th className="text-left px-4 py-3">Description</th>
+                  <th className="text-right px-4 py-3">P.U. HT</th>
+                  <th className="text-right px-4 py-3">Qté</th>
+                  <th className="text-right px-4 py-3">Rem.%</th>
+                  <th className="text-right px-4 py-3">TVA%</th>
+                  <th className="text-right px-4 py-3">Total HT</th>
+                  <th className="px-4 py-3"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-800">
                 {lines.map((l, idx) => (
-                  <tr key={idx}>
-                    <td className="py-2 px-2">
+                  <tr key={idx} className="hover:bg-gray-800/30">
+                    <td className="px-4 py-3">
+                      <p className="text-white text-xs text-gray-500 font-mono mb-1">{l.nom}</p>
                       <input value={l.description} onChange={e => updateLine(idx, 'description', e.target.value)}
-                        className="w-full px-2 py-1 bg-gray-800 border border-gray-700 rounded text-white text-sm" />
+                        className="w-full px-2 py-1 bg-gray-800 border border-gray-700 rounded text-white text-sm focus:outline-none focus:border-indigo-500" />
                     </td>
-                    <td className="py-2 px-2">
+                    <td className="px-4 py-3">
                       <input type="number" min={0} step={0.001} value={l.unitPrice}
                         onChange={e => updateLine(idx, 'unitPrice', Number(e.target.value))}
-                        className="w-24 px-2 py-1 bg-gray-800 border border-gray-700 rounded text-white text-right font-mono" />
+                        className="w-24 px-2 py-1 bg-gray-800 border border-gray-700 rounded text-white text-right font-mono text-sm" />
                     </td>
-                    <td className="py-2 px-2">
+                    <td className="px-4 py-3">
                       <input type="number" min={0.001} value={l.quantity}
                         onChange={e => updateLine(idx, 'quantity', Number(e.target.value))}
-                        className="w-20 px-2 py-1 bg-gray-800 border border-gray-700 rounded text-white text-right font-mono" />
+                        className="w-20 px-2 py-1 bg-gray-800 border border-gray-700 rounded text-white text-right font-mono text-sm" />
                     </td>
-                    <td className="py-2 px-2">
+                    <td className="px-4 py-3">
                       <input type="number" min={0} max={100} value={l.discount}
                         onChange={e => updateLine(idx, 'discount', Number(e.target.value))}
-                        className="w-16 px-2 py-1 bg-gray-800 border border-gray-700 rounded text-white text-right font-mono" />
+                        className="w-16 px-2 py-1 bg-gray-800 border border-gray-700 rounded text-white text-right font-mono text-sm" />
                     </td>
-                    <td className="py-2 px-2 text-right text-white font-mono">{lineTotals[idx].toFixed(3)}</td>
-                    <td className="py-2 px-2">
-                      <button onClick={() => removeLine(idx)} className="text-red-400"><Trash2 className="w-4 h-4" /></button>
+                    <td className="px-4 py-3">
+                      <input type="number" min={0} max={100} value={l.tvaRate}
+                        onChange={e => updateLine(idx, 'tvaRate', Number(e.target.value))}
+                        className="w-16 px-2 py-1 bg-gray-800 border border-gray-700 rounded text-white text-right font-mono text-sm" />
+                    </td>
+                    <td className="px-4 py-3 text-right text-white font-mono text-sm">{lineTotals[idx].toFixed(3)}</td>
+                    <td className="px-4 py-3">
+                      <button onClick={() => removeLine(idx)} className="text-gray-600 hover:text-red-400 transition-colors">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -213,17 +208,67 @@ function NewInvoiceForm() {
         )}
 
         {lines.length > 0 && (
-          <div className="flex justify-end text-sm space-y-1 text-right">
-            <div>
-              <p className="text-gray-400">Total TTC : <span className="text-indigo-400 font-mono font-semibold">{totalTtc.toFixed(3)} DTN</span></p>
+          <div className="px-5 py-4 border-t border-gray-800 flex justify-end">
+            <div className="text-right space-y-1 text-sm">
+              <p className="text-gray-400">Total HT : <span className="text-white font-mono">{totalHt.toFixed(3)} DTN</span></p>
+              <p className="text-gray-400">TVA : <span className="text-white font-mono">{totalTva.toFixed(3)} DTN</span></p>
+              <p className="text-white font-semibold">Total TTC : <span className="font-mono text-indigo-400">{totalTtc.toFixed(3)} DTN</span></p>
             </div>
           </div>
         )}
+
+        {/* Liste produits toujours visible */}
+        <div className="p-4 border-t border-gray-800">
+          <input value={productSearch} onChange={e => setProductSearch(e.target.value)}
+            placeholder="Rechercher un produit à ajouter..."
+            className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500 mb-2" />
+          {visibleProducts.length > 0 ? (
+            <div className="space-y-1 max-h-64 overflow-y-auto">
+              {visibleProducts.slice(0, 12).map(p => {
+                const price    = Number(p.prixVente) > 0 ? Number(p.prixVente) : Number(p.prixVenteAuto);
+                const stockFini = p.stock?.stockFini ?? 0;
+                const stockFab  = p.stock?.stockFabricable ?? 0;
+                return (
+                  <button key={p.id} onClick={() => addProduct(p)}
+                    className="w-full flex items-center justify-between px-3 py-2.5 bg-gray-800 hover:bg-gray-700 rounded-lg text-left transition-colors border border-transparent hover:border-gray-600">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <Package className="w-3.5 h-3.5 text-gray-500 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-white text-sm truncate">{p.nom}</p>
+                        <p className="text-gray-500 text-xs font-mono">{p.reference}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0 ml-3">
+                      <div className="text-right text-xs">
+                        <div className="flex items-center gap-1 justify-end">
+                          <Warehouse className="w-3 h-3 text-gray-500" />
+                          <span className={stockFini > 0 ? 'text-green-400 font-mono' : 'text-gray-600 font-mono'}>{stockFini}</span>
+                        </div>
+                        <div className="flex items-center gap-1 justify-end">
+                          <Wrench className="w-3 h-3 text-gray-500" />
+                          <span className={stockFab > 0 ? 'text-blue-400 font-mono' : 'text-gray-600 font-mono'}>{stockFab}</span>
+                        </div>
+                      </div>
+                      <div className="text-right min-w-[70px]">
+                        <p className="text-green-400 text-sm font-mono">{price.toFixed(3)}</p>
+                        <p className="text-gray-500 text-xs">DTN</p>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-gray-600 text-xs py-2">
+              {productSearch ? 'Aucun produit trouvé' : 'Tous les produits ont été ajoutés'}
+            </p>
+          )}
+        </div>
       </div>
 
       <div className="flex justify-end gap-3">
-        <button onClick={() => router.back()} className="px-4 py-2 border border-gray-700 rounded-lg text-gray-400 text-sm">Annuler</button>
-        <button onClick={handleSubmit} disabled={createInvoice.isPending}
+        <button onClick={() => router.back()} className="px-4 py-2 border border-gray-700 rounded-lg text-gray-400 text-sm hover:bg-gray-800">Annuler</button>
+        <button onClick={handleSubmit} disabled={createInvoice.isPending || !clientId || !lines.length}
           className="flex items-center gap-2 px-5 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm rounded-lg">
           {createInvoice.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
           Créer la facture

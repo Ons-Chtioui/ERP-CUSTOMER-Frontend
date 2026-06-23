@@ -78,6 +78,17 @@ export const useConvertQuote = () => {
   });
 };
 
+export const useSendQuote = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post(`/documents/quotes/${id}/send`).then(r => r.data),
+    onSuccess: (_, id) => {
+      qc.invalidateQueries({ queryKey: ['quotes'] });
+      qc.invalidateQueries({ queryKey: ['quotes', id] });
+    },
+  });
+};
+
 export const useDeleteQuote = () => {
   const qc = useQueryClient();
   return useMutation({

@@ -92,6 +92,16 @@ export interface OrderStatusHistory {
   user?: { id: string; prenom: string; nom: string };
 }
 
+export interface OrderModification {
+  id: number;
+  orderId: number;
+  action: string;
+  details: string | null;
+  changedBy: number;
+  createdAt: string;
+  user?: { id: number; prenom: string; nom: string };
+}
+
 // ─── Commande ─────────────────────────────────────────────────────────────────
 export interface Order {
   id: string;
@@ -114,6 +124,7 @@ export interface Order {
   createdBy: string;
   lines: OrderLine[];
   statusHistory?: OrderStatusHistory[];
+  modifications?: OrderModification[];
   creator?: { id: string; prenom: string; nom: string };
   createdAt: string;
   updatedAt: string;

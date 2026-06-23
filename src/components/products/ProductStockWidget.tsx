@@ -78,7 +78,7 @@ export function ProductStockWidget({ productId, unite = 'unité' }: Props) {
       )}
 
       {/* Bouton transfert */}
-      {inventory.length > 1 && (
+      {inventory.length > 0 && (
         <button
           onClick={() => setShowTransfer(v => !v)}
           className="flex items-center gap-2 text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
