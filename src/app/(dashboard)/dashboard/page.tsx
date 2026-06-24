@@ -1,431 +1,279 @@
-// frontend/src/app/(dashboard)/dashboard/page.tsx
+// src/app/(dashboard)/dashboard/page.tsx
 'use client';
 
-import { useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { useAuth } from '@/hooks/useAuth';
-import { useWarehouses } from '@/hooks/useWarehouses';
-import { useStockAlerts } from '@/hooks/useStockAlerts';
-import { useStockMovements } from '@/hooks/useStockMovements';
-import { useDashboardAnalytics } from '@/hooks/useAnalytics';
-
-import { Can } from '@/components/auth/Can';
-import { ExportButtons } from '@/components/analytics/ExportButtons';
-import { KPICard } from '@/components/analytics/KPICard';
-import { BarChart } from '@/components/analytics/BarChart';
-
+import { useState } from 'react';
 import {
-  Warehouse,
-  AlertTriangle,
-  TrendingUp,
-  TrendingDown,
-  ArrowRightLeft,
-  Wallet,
-  Receipt,
-  FileText,
-  Download,
-  BarChart3,
-  DollarSign,
-  ShoppingCart,
-  Package,
-  Loader2,
-  RefreshCw,
+  TrendingUp, Package, FileText, AlertTriangle,
+  ShoppingCart, Building2, RefreshCw, Calendar,
 } from 'lucide-react';
-import Link from 'next/link';
-import { cn } from '@/lib/utils';
-import api from '@/lib/api';
+import { Can } from '@/components/auth/Can';
+import { useDashboardAnalytics } from '@/hooks/useAnalytics';
+import { KPICard } from '@/components/analytics/KPICard';
+import { RevenueChart } from '@/components/analytics/Revenuechart';
+import { TopProductsChart } from '@/components/analytics/Topproductschart';
+import { StatusPieChart } from '@/components/analytics/Statuspiechart';
+import { ExportButtons } from '@/components/analytics/ExportButtons';
 
-import { exportCsv } from '@/lib/export';
-
-// ─── LOADING SPINNER ──────────────────────────────────────────────
-
-function LoadingSpinner() {
-  return (
-    <div className="flex flex-col items-center justify-center py-20 gap-3">
-      <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
-      <p className="text-gray-400 text-sm">Chargement du tableau de bord...</p>
-    </div>
-  );
-}
-
-// ─── ERROR STATE ───────────────────────────────────────────────────
-
-function ErrorState({ onRetry }: { onRetry: () => void }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-20 gap-4">
-      <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-6 text-center max-w-md">
-        <AlertTriangle className="w-10 h-10 text-red-400 mx-auto mb-3" />
-        <h3 className="text-white font-semibold mb-2">Erreur de chargement</h3>
-        <p className="text-gray-400 text-sm">
-          Impossible de charger les données du tableau de bord.
-        </p>
-        <button
-          onClick={onRetry}
-          className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition"
-        >
-          <RefreshCw className="w-4 h-4" /> Réessayer
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ─── MAIN DASHBOARD ──────────────────────────────────────────────
+const CURRENT_YEAR = new Date().getFullYear();
+const YEARS = [CURRENT_YEAR, CURRENT_YEAR - 1, CURRENT_YEAR - 2];
 
 export default function DashboardPage() {
-  const { user } = useAuth();
-  const [year] = useState(new Date().getFullYear());
+  const [year, setYear] = useState(CURRENT_YEAR);
 
-  // ─── QUERIES ──────────────────────────────────────────────────────
   const {
-    data: analytics,
-    isLoading: loadingAnalytics,
-    error: analyticsError,
-    refetch: refetchAnalytics,
-  } = useDashboardAnalytics();
+    isLoading, isError,
+    kpis, monthlyCa, topProducts,
+    stockStatus, ordersByStatus, warehousePerf,
+    rolling12, refetch,
+  } = useDashboardAnalytics(year);
 
-  const { data: warehouses = [], isLoading: loadingWarehouses } = useWarehouses();
-  const { data: alerts = [], isLoading: loadingAlerts } = useStockAlerts();
-  const { data: movements = [], isLoading: loadingMovements } = useStockMovements({ limit: 5 });
-
-  const { data: summary = [] } = useQuery({
-    queryKey: ['warehouses', 'summary'],
-    queryFn: () => api.get('/warehouses/summary').then((r) => r.data),
-    enabled: !loadingWarehouses,
-  });
-
-  // ─── COMPUTED VALUES ─────────────────────────────────────────────
-  const activeWarehouses = useMemo(
-    () => warehouses.filter((w: any) => w.isActive).length,
-    [warehouses]
-  );
-
-  const activeAlerts = useMemo(
-    () => alerts.filter((a: any) => a.status === 'active').length,
-    [alerts]
-  );
-
-  const totalValue = useMemo(
-    () => (summary as { totalValue?: number }[]).reduce(
-      (s: number, w: { totalValue?: number }) => s + (w.totalValue ?? 0),
-      0
-    ),
-    [summary]
-  );
-
-  const typeConfig: Record<string, { label: string; color: string; Icon: any }> = {
-    IN: { label: 'Entrée', color: 'text-green-400', Icon: TrendingUp },
-    OUT: { label: 'Sortie', color: 'text-red-400', Icon: TrendingDown },
-    TRANSFER: { label: 'Transfert', color: 'text-blue-400', Icon: ArrowRightLeft },
-    ADJUSTMENT: { label: 'Ajustement', color: 'text-orange-400', Icon: TrendingUp },
-  };
-
-  // ─── LOADING STATE ──────────────────────────────────────────────
-  if (loadingAnalytics && !analytics) {
-    return <LoadingSpinner />;
+  if (isLoading) {
+    return (
+      <div className="space-y-6 animate-pulse">
+        <div className="h-8 w-64 bg-gray-800 rounded" />
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="h-28 bg-gray-900 border border-gray-800 rounded-xl" />
+          ))}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 h-64 bg-gray-900 border border-gray-800 rounded-xl" />
+          <div className="h-64 bg-gray-900 border border-gray-800 rounded-xl" />
+        </div>
+      </div>
+    );
   }
 
-  // ─── ERROR STATE ─────────────────────────────────────────────────
-  if (analyticsError) {
-    return <ErrorState onRetry={() => refetchAnalytics()} />;
+  if (isError || !kpis) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 gap-4">
+        <AlertTriangle className="w-12 h-12 text-red-400" />
+        <p className="text-gray-400">Impossible de charger les données</p>
+        <button onClick={refetch}
+          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded-lg">
+          Réessayer
+        </button>
+      </div>
+    );
   }
 
-  // ─── RENDER ──────────────────────────────────────────────────────
+  // Taux de paiement
+  const totalRevenue = kpis.ca + kpis.totalUnpaid;
+  const paymentRate  = totalRevenue > 0 ? Math.round((kpis.ca / totalRevenue) * 100) : 0;
+
+  // Alertes critiques (rupture + critique)
+  const criticalAlerts = stockStatus.filter(s => s.status === 'rupture' || s.status === 'critique');
+
   return (
     <div className="space-y-6">
-      {/* HEADER */}
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+      {/* ── En-tête ── */}
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-white">
-            Bonjour, {user?.prenom ?? 'Utilisateur'} 👋
-          </h1>
-          <p className="text-gray-400 text-sm mt-1">
-            Rôle : <span className="text-indigo-400 font-medium">{typeof user?.role === 'string' ? user.role : user?.role?.nom ?? '—'}</span>
-          </p>
-          <p className="text-gray-500 text-xs mt-0.5">
-            Dernière mise à jour : {new Date().toLocaleTimeString()}
-          </p>
+          <h1 className="text-2xl font-semibold text-white">Dashboard</h1>
+          <p className="text-gray-400 text-sm">Vue d&apos;ensemble — Année {year}</p>
         </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {/* ✅ BOUTONS D'EXPORT EXCEL */}
-          <ExportButtons year={year} />
-
-          {/* ✅ BOUTON CSV (compatibilité) */}
-          <Can permission="reports.export">
-            <button
-              onClick={async () => {
-                try {
-                  await exportCsv('dashboard');
-                } catch (err: unknown) {
-                  const message = err instanceof Error ? err.message : 'Erreur export CSV';
-                  alert(message);
-                }
-              }}
-              className="flex items-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg text-sm text-gray-300 transition"
-            >
-              <Download className="w-4 h-4" /> CSV
-            </button>
-          </Can>
-
-          <button
-            onClick={() => refetchAnalytics()}
-            className="flex items-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg text-sm text-gray-300 transition"
-          >
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* Sélecteur année */}
+        <div className="flex items-center gap-2 bg-gray-900 border border-gray-800 rounded-lg px-3 py-2">
+  <Calendar className="w-4 h-4 text-blue-500" />
+  <select 
+    value={year} 
+    onChange={e => setYear(Number(e.target.value))}
+    className="bg-transparent text-white text-sm focus:outline-none"
+  >
+    {YEARS.map(y => (
+      <option key={y} value={y} className="bg-gray-800 text-white hover:bg-gray-700">
+        {y}
+      </option>
+    ))}
+  </select>
+</div>
+          {/* Rafraîchir */}
+          <button onClick={refetch}
+            className="p-2 bg-gray-900 border border-gray-800 rounded-lg text-gray-400 hover:text-white transition-colors"
+            title="Rafraîchir">
             <RefreshCw className="w-4 h-4" />
           </button>
+          {/* Exports Excel */}
+          <Can permission="analytics.export">
+            <ExportButtons year={year} />
+          </Can>
         </div>
       </div>
 
-      {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+      {/* ── KPIs ── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KPICard
-          title="CA encaissé"
-          value={`${analytics?.revenue.paid.toFixed(0) ?? 0} DTN`}
-          icon={<DollarSign />}
+          title="CA Encaissé"
+          value={`${kpis.ca.toFixed(3)} DTN`}
+          icon={<TrendingUp className="w-5 h-5" />}
           color="text-green-400"
+          subtitle={`Impayé : ${kpis.totalUnpaid.toFixed(3)} DTN`}
+          progress={paymentRate}
+          progressColor="bg-green-500"
+          href="/invoices?status=paid"
         />
         <KPICard
-          title="Impayé"
-          value={`${analytics?.revenue.unpaid.toFixed(0) ?? 0} DTN`}
-          icon={<Wallet />}
-          color="text-orange-400"
-        />
-        <KPICard
-          title="Commandes livrées"
-          value={analytics?.orders.delivered ?? 0}
-          icon={<ShoppingCart />}
-          color="text-blue-400"
+          title="Commandes"
+          value={kpis.orderCount}
+          icon={<ShoppingCart className="w-5 h-5" />}
+          color="text-indigo-400"
+          subtitle={`${ordersByStatus.find(o => o.status === 'delivered')?.count ?? 0} livrées`}
+          href="/orders"
         />
         <KPICard
           title="Factures en retard"
-          value={analytics?.invoices.overdue ?? 0}
-          icon={<AlertTriangle />}
-          color="text-red-400"
+          value={kpis.overdueInvoiceCount}
+          icon={<AlertTriangle className="w-5 h-5" />}
+          color={kpis.overdueInvoiceCount > 0 ? 'text-red-400' : 'text-green-400'}
+          subtitle={kpis.overdueInvoiceCount > 0 ? 'Action requise' : 'Tout est à jour ✓'}
+          href="/invoices?status=overdue"
         />
         <KPICard
-          title="Conversion devis"
-          value={`${analytics?.quotes.conversionRate ?? 0}%`}
-          icon={<TrendingUp />}
-          color="text-indigo-400"
-        />
-        <KPICard
-          title="Alertes stock"
-          value={activeAlerts}
-          icon={<AlertTriangle />}
-          color="text-orange-400"
-        />
-
-        <KPICard
-          title="Entrepôts"
-          value={activeWarehouses}
-          icon={<Warehouse />}
-          color="text-white"
-          href="/warehouses"
-        />
-        <KPICard
-          title="Valeur stock"
-          value={`${totalValue.toFixed(0)} DTN`}
-          icon={<Package />}
-          color="text-white"
-          href="/components"
+          title="Stock critique"
+          value={kpis.lowStockCount}
+          icon={<Package className="w-5 h-5" />}
+          color={kpis.lowStockCount > 0 ? 'text-orange-400' : 'text-green-400'}
+          subtitle={kpis.lowStockCount > 0 ? 'Réappro. nécessaire' : 'Stock OK ✓'}
+          href="/stock-alerts"
         />
       </div>
 
-      {/* CHARTS SECTION */}
-      {analytics && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Monthly Revenue */}
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-            <h2 className="text-white font-medium flex items-center gap-2 mb-4">
-              <BarChart3 className="w-4 h-4 text-green-400" />
-              Chiffre d&apos;affaires mensuel - {year}
-            </h2>
-            <BarChart
-              data={analytics.monthlyRevenue.map((m) => ({
-                month: m.month,
-                revenue: m.revenue,
-              }))}
-              labelKey="month"
-              valueKey="revenue"
-              color="bg-green-500"
-            />
-            <div className="mt-3 text-right text-xs text-gray-500">
-              Total : {analytics.monthlyRevenue.reduce((s, m) => s + m.revenue, 0).toFixed(0)} DTN
-            </div>
-          </div>
-
-          {/* Top Products */}
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-            <h2 className="text-white font-medium flex items-center gap-2 mb-4">
+      {/* ── Graphiques ligne 1 ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* CA Mensuel (2/3) */}
+        <div className="lg:col-span-2 bg-gray-900 border border-gray-800 rounded-xl p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-white font-medium flex items-center gap-2">
               <TrendingUp className="w-4 h-4 text-indigo-400" />
-              Produits les plus vendus
+              CA mensuel {year}
             </h2>
-            <BarChart
-              data={analytics.topProducts.map((p) => ({
-                name: p.name,
-                quantity: p.quantity,
-              }))}
-              labelKey="name"
-              valueKey="quantity"
-              color="bg-indigo-500"
-            />
+            <span className="text-gray-500 text-xs font-mono">
+              Total : {kpis.ca.toFixed(3)} DTN
+            </span>
           </div>
+          {/* CA glissant 12 mois si disponible, sinon mensuel de l'année */}
+          <RevenueChart
+            data={rolling12.length > 0
+              ? rolling12.map(r => ({ month: r.month, revenue: r.ca }))
+              : monthlyCa.map(m => ({ month: m.month, revenue: m.ca }))
+            }
+            height={220}
+          />
+        </div>
 
-          {/* Warehouse Performance */}
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-            <h2 className="text-white font-medium flex items-center gap-2 mb-4">
-              <Warehouse className="w-4 h-4 text-blue-400" />
-              Performance entrepôts
+        {/* Commandes par statut (1/3) */}
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+          <h2 className="text-white font-medium mb-4 flex items-center gap-2">
+            <ShoppingCart className="w-4 h-4 text-indigo-400" />
+            Commandes par statut
+          </h2>
+          <StatusPieChart
+            data={ordersByStatus.map(o => ({ status: o.status, count: o.count }))}
+            height={220}
+          />
+        </div>
+      </div>
+
+      {/* ── Graphiques ligne 2 ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Top 5 produits */}
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-white font-medium flex items-center gap-2">
+              <Package className="w-4 h-4 text-indigo-400" />
+              Top 5 produits {year}
             </h2>
-            {analytics.warehouses.length > 0 ? (
-              <div className="space-y-3">
-                {analytics.warehouses.map((w) => (
-                  <div
-                    key={w.id}
-                    className="flex items-center justify-between p-3 bg-gray-800/30 rounded-lg hover:bg-gray-800/50 transition"
-                  >
-                    <span className="text-white font-medium">{w.name}</span>
-                    <div className="text-right">
-                      <span className="text-gray-400 text-sm">{w.items} refs</span>
-                      <span className="ml-3 text-green-400 font-mono">{w.value.toFixed(0)} DTN</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-gray-500 text-sm">Aucun entrepôt configuré</p>
+            <span className="text-gray-500 text-xs">par quantité vendue</span>
+          </div>
+          <TopProductsChart data={topProducts} metric="totalQty" height={250} />
+        </div>
+
+        {/* État stock composants */}
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-white font-medium flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-orange-400" />
+              État stock composants
+            </h2>
+            {criticalAlerts.length > 0 && (
+              <span className="bg-red-900/40 text-red-400 text-xs px-2 py-0.5 rounded-full">
+                {criticalAlerts.length} alertes
+              </span>
             )}
           </div>
-
-          {/* Commercial KPIs */}
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-            <h2 className="text-white font-medium flex items-center gap-2 mb-4">
-              <Receipt className="w-4 h-4 text-purple-400" />
-              KPIs commerciaux
-            </h2>
-            <div className="grid grid-cols-2 gap-3">
-              {analytics.invoices.byStatus.map((s) => (
-                <div key={s.status} className="bg-gray-800/50 rounded-lg p-3 text-center">
-                  <p className="text-gray-400 text-xs capitalize">{s.status}</p>
-                  <p className="text-white font-bold text-lg">{s.count}</p>
-                  <p className="text-gray-500 text-xs font-mono">{s.total.toFixed(0)} DTN</p>
+          {/* Tableau résumé par statut */}
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            {(['rupture', 'critique', 'faible', 'normal'] as const).map(s => {
+              const count = stockStatus.filter(c => c.status === s).length;
+              const colors = {
+                rupture:  'text-red-400 bg-red-900/30 border-red-800/50',
+                critique: 'text-orange-400 bg-orange-900/30 border-orange-800/50',
+                faible:   'text-yellow-400 bg-yellow-900/30 border-yellow-800/50',
+                normal:   'text-green-400 bg-green-900/30 border-green-800/50',
+              };
+              const labels = { rupture: 'Rupture', critique: 'Critique', faible: 'Faible', normal: 'Normal' };
+              return (
+                <div key={s} className={`border rounded-lg p-3 ${colors[s]}`}>
+                  <p className="text-xs opacity-70">{labels[s]}</p>
+                  <p className="text-2xl font-bold font-mono">{count}</p>
+                </div>
+              );
+            })}
+          </div>
+          {/* Alertes critiques */}
+          {criticalAlerts.length > 0 && (
+            <div className="space-y-1 max-h-32 overflow-y-auto">
+              {criticalAlerts.slice(0, 5).map(c => (
+                <div key={c.id} className="flex items-center justify-between text-xs">
+                  <span className="text-gray-300 truncate max-w-[160px]">{c.name}</span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="font-mono text-red-400">{c.quantiteDisponible}</span>
+                    <span className={`px-1.5 py-0.5 rounded text-xs ${
+                      c.status === 'rupture' ? 'bg-red-900/50 text-red-400' : 'bg-orange-900/50 text-orange-400'
+                    }`}>
+                      {c.status}
+                    </span>
+                  </div>
                 </div>
               ))}
             </div>
-            <Link
-              href="/quotes"
-              className="mt-4 inline-flex items-center gap-1 text-indigo-400 text-sm hover:text-indigo-300 transition"
-            >
-              <FileText className="w-4 h-4" /> Voir tous les devis →
-            </Link>
-          </div>
-        </div>
-      )}
-
-      {/* BOTTOM SECTION - Stock Alerts & Movements */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Stock Alerts */}
-        <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800">
-            <h2 className="text-white font-medium flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-orange-400" />
-              Ruptures & alertes stock
-            </h2>
-            <Link href="/alerts" className="text-indigo-400 text-sm hover:text-indigo-300 transition">
-              Voir tout →
-            </Link>
-          </div>
-          {loadingAlerts ? (
-            <div className="p-8 text-center text-gray-500">
-              <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
-              Chargement des alertes...
-            </div>
-          ) : (
-            <>
-              {(analytics?.stockAlerts ?? alerts.filter((a: any) => a.status === 'active'))
-                .slice(0, 5)
-                .map((alert: any, i: number) => {
-                  const componentName = alert.component?.nom ?? alert.component ?? 'Composant';
-                  const warehouseName = alert.warehouse?.nom ?? alert.warehouse ?? 'Entrepôt';
-                  const quantity = alert.quantity ?? alert.quantityAtAlert ?? 0;
-
-                  return (
-                    <div
-                      key={alert.id ?? i}
-                      className="flex items-center gap-3 px-5 py-3 border-b border-gray-800 last:border-0 hover:bg-gray-800/30 transition"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <p className="text-white text-sm truncate font-medium">{componentName}</p>
-                        <p className="text-gray-500 text-xs">{warehouseName}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-orange-400 text-sm font-semibold">
-                          {quantity} unités
-                        </p>
-                        <p className="text-gray-500 text-xs">Seuil: {alert.threshold ?? '—'}</p>
-                      </div>
-                    </div>
-                  );
-                })}
-              {(!analytics?.stockAlerts || analytics.stockAlerts.length === 0) && (
-                <p className="text-center text-gray-500 text-sm py-8">✅ Aucune alerte stock</p>
-              )}
-            </>
-          )}
-        </div>
-
-        {/* Recent Movements */}
-        <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800">
-            <h2 className="text-white font-medium flex items-center gap-2">
-              <TrendingUp className="w-4 h-4 text-blue-400" />
-              Derniers mouvements
-            </h2>
-            <Link href="/stock-movements" className="text-indigo-400 text-sm hover:text-indigo-300 transition">
-              Voir tout →
-            </Link>
-          </div>
-          {loadingMovements ? (
-            <div className="p-8 text-center text-gray-500">
-              <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
-              Chargement des mouvements...
-            </div>
-          ) : (
-            <>
-              {movements.slice(0, 5).map((mov: any) => {
-                const cfg = typeConfig[mov.type] ?? typeConfig.IN;
-                const Icon = cfg.Icon;
-                const isOut = mov.type === 'OUT';
-
-                return (
-                  <div
-                    key={mov.id}
-                    className="flex items-center gap-3 px-5 py-3 border-b border-gray-800 last:border-0 hover:bg-gray-800/30 transition"
-                  >
-                    <Icon className={cn('w-4 h-4 flex-shrink-0', cfg.color)} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-white text-sm truncate font-medium">
-                        {mov.component?.nom ?? 'Composant'}
-                      </p>
-                      <p className="text-gray-500 text-xs">{mov.warehouse?.nom ?? 'Entrepôt'}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className={cn('text-sm font-semibold', cfg.color)}>
-                        {isOut ? '-' : '+'}{mov.quantity}
-                      </p>
-                      <p className="text-gray-500 text-xs capitalize">{cfg.label}</p>
-                    </div>
-                  </div>
-                );
-              })}
-              {movements.length === 0 && (
-                <p className="text-center text-gray-500 text-sm py-8">Aucun mouvement récent</p>
-              )}
-            </>
           )}
         </div>
       </div>
+
+      {/* ── Performance entrepôts ── */}
+      {warehousePerf.length > 0 && (
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+          <h2 className="text-white font-medium mb-4 flex items-center gap-2">
+            <Building2 className="w-4 h-4 text-indigo-400" />
+            Performance des entrepôts
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {warehousePerf.map(wh => {
+              const maxValue = Math.max(...warehousePerf.map(w => w.stockValue), 1);
+              const pct = Math.round((wh.stockValue / maxValue) * 100);
+              return (
+                <div key={wh.warehouseId} className="bg-gray-800/50 border border-gray-700 rounded-xl p-4">
+                  <div className="flex items-start justify-between mb-3">
+                    <p className="text-white text-sm font-medium">{wh.warehouseName}</p>
+                    <span className="bg-indigo-900/40 text-indigo-400 text-xs px-2 py-0.5 rounded-full">
+                      {wh.componentCount} réf.
+                    </span>
+                  </div>
+                  <p className="text-indigo-400 font-mono text-lg font-bold">
+                    {wh.stockValue.toFixed(0)} DTN
+                  </p>
+                  <div className="mt-2 w-full bg-gray-700 rounded-full h-1.5">
+                    <div className="bg-indigo-500 h-full rounded-full" style={{ width: `${pct}%` }} />
+                  </div>
+                  <p className="text-gray-500 text-xs mt-1">{pct}% de la valeur totale</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
