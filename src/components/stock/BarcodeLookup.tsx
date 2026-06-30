@@ -1,9 +1,10 @@
+// src/components/stock/BarcodeLookup.tsx
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Search, Camera, Image as ImageIcon, X,
+  Search, Camera, Image as ImageIcon,
   Loader2, Package, AlertCircle, CheckCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -14,11 +15,17 @@ import type { Component } from '@/types/stock';
 type Mode = 'manual' | 'camera' | 'image';
 
 interface BarcodeLookupProps {
-  /** appelé quand un composant est trouvé — sinon navigue vers /components/:id */
   onFound?: (component: Component) => void;
-  /** classe CSS supplémentaire */
   className?: string;
 }
+
+// ✅ Définir les exceptions ZXing pour les ignorer
+const ZXING_EXCEPTIONS = [
+  'NotFoundException',
+  'ChecksumException',
+  'FormatException',
+  'ReaderException',
+];
 
 export function BarcodeLookup({ onFound, className }: BarcodeLookupProps) {
   const router = useRouter();
@@ -28,12 +35,15 @@ export function BarcodeLookup({ onFound, className }: BarcodeLookupProps) {
   const [error, setError] = useState('');
   const [found, setFound] = useState<Component | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
+  const [scanning, setScanning] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const scannerRef = useRef<import('@zxing/browser').BrowserMultiFormatReader | null>(null);
+  const scannerRef = useRef<any>(null);
+  const isScanningRef = useRef(false);
+  const scanTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // ── Recherche par code ──────────────────────────────────────────
+  // ── RECHERCHE ────────────────────────────────────────────────────
   const lookup = useCallback(async (code: string) => {
     const clean = code.trim();
     if (!clean) return;
@@ -54,61 +64,144 @@ export function BarcodeLookup({ onFound, className }: BarcodeLookupProps) {
     }
   }, [onFound]);
 
-  // ── Mode manuel : submit ────────────────────────────────────────
+  // ── MODE MANUEL ─────────────────────────────────────────────────
   const handleManualSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     lookup(input);
   };
 
-  // ── Mode caméra ─────────────────────────────────────────────────
+  // ─── VÉRIFIER SI L'ERREUR EST UNE EXCEPTION ZXING ──────────────
+  const isZxingException = (err: any): boolean => {
+    if (!err) return false;
+    const errName = err.name || err.constructor?.name || '';
+    return ZXING_EXCEPTIONS.some(ex => errName.includes(ex));
+  };
+
+  // ─── MODE CAMÉRA ─────────────────────────────────────────────────
+
   const startCamera = useCallback(async () => {
     setError('');
     setCameraActive(true);
+    setScanning(true);
+
     try {
-      const { BrowserMultiFormatReader } = await import('@zxing/browser');
-      const reader = new BrowserMultiFormatReader();
-      scannerRef.current = reader;
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error('Votre navigateur ne supporte pas la caméra');
+      }
 
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' },
+        video: { 
+          facingMode: 'environment',
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+        },
       });
       streamRef.current = stream;
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
-
-        reader.decodeFromVideoElement(videoRef.current, (result, err) => {
-          if (result) {
-            stopCamera();
-            lookup(result.getText());
-          }
-        });
       }
-    } catch {
-      setError('Impossible d\'accéder à la caméra. Vérifiez les permissions.');
+
+      const { BrowserMultiFormatReader } = await import('@zxing/browser');
+      const reader = new BrowserMultiFormatReader();
+      scannerRef.current = reader;
+      isScanningRef.current = true;
+
+      if (videoRef.current) {
+        reader.decodeFromVideoElement(
+          videoRef.current,
+          (result, err) => {
+            // ✅ Si un résultat est trouvé
+            if (result && isScanningRef.current) {
+              isScanningRef.current = false;
+              if (scanTimeoutRef.current) {
+                clearTimeout(scanTimeoutRef.current);
+              }
+              scanTimeoutRef.current = setTimeout(() => {
+                stopCamera();
+                lookup(result.getText());
+              }, 300);
+              return;
+            }
+
+            // ✅ Ignorer les exceptions ZXing (NotFoundException, ChecksumException, etc.)
+            if (err) {
+              // ✅ Ne pas afficher les erreurs normales de scan
+              if (isZxingException(err)) {
+                return;
+              }
+              // ✅ Afficher les autres erreurs
+              console.warn('[BarcodeLookup] Erreur:', err);
+            }
+          }
+        );
+      }
+
+      setError('');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Erreur d\'accès à la caméra';
+      setError(msg);
       setCameraActive(false);
+      setScanning(false);
     }
   }, [lookup]);
 
+  // ─── ARRÊTER LA CAMÉRA ──────────────────────────────────────────
+
   const stopCamera = useCallback(() => {
-    (scannerRef.current as any)?.reset();
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
-    scannerRef.current = null;
+    isScanningRef.current = false;
+
+    if (scanTimeoutRef.current) {
+      clearTimeout(scanTimeoutRef.current);
+      scanTimeoutRef.current = null;
+    }
+
+    if (scannerRef.current) {
+      try {
+        if (typeof scannerRef.current.stop === 'function') {
+          scannerRef.current.stop();
+        }
+      } catch {
+        // Ignorer
+      }
+      scannerRef.current = null;
+    }
+
+    if (streamRef.current) {
+      try {
+        streamRef.current.getTracks().forEach((t) => t.stop());
+      } catch {
+        // Ignorer
+      }
+      streamRef.current = null;
+    }
+
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+
     setCameraActive(false);
+    setScanning(false);
   }, []);
 
+  // ✅ NETTOYAGE AU DÉMONTAGE
+  useEffect(() => {
+    return () => {
+      stopCamera();
+    };
+  }, [stopCamera]);
+
+  // ✅ CHANGEMENT DE MODE
   useEffect(() => {
     if (mode === 'camera') {
       startCamera();
     } else {
       stopCamera();
     }
-    return () => stopCamera();
-  }, [mode]);
+  }, [mode, startCamera, stopCamera]);
 
-  // ── Mode image ──────────────────────────────────────────────────
+  // ── MODE IMAGE ──────────────────────────────────────────────────
   const handleImageFile = async (file: File) => {
     setLoading(true);
     setError('');
@@ -123,9 +216,22 @@ export function BarcodeLookup({ onFound, className }: BarcodeLookupProps) {
         img.onload = () => res();
         img.onerror = () => rej(new Error('Erreur chargement image'));
       });
-      const result = await reader.decodeFromImageElement(img);
-      URL.revokeObjectURL(url);
-      await lookup(result.getText());
+      
+      try {
+        const result = await reader.decodeFromImageElement(img);
+        URL.revokeObjectURL(url);
+        await lookup(result.getText());
+      } catch (err) {
+        // ✅ Ignorer les exceptions ZXing
+        if (isZxingException(err)) {
+          setError('Aucun code-barres lisible dans cette image');
+        } else {
+          throw err;
+        }
+      } finally {
+        URL.revokeObjectURL(url);
+        setLoading(false);
+      }
     } catch {
       setError('Aucun code-barres lisible dans cette image');
       setLoading(false);
@@ -199,6 +305,7 @@ export function BarcodeLookup({ onFound, className }: BarcodeLookupProps) {
                 className="w-full h-full object-cover"
                 playsInline
                 muted
+                autoPlay
               />
               {/* Viseur */}
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -209,15 +316,23 @@ export function BarcodeLookup({ onFound, className }: BarcodeLookupProps) {
                   <div className="absolute bottom-0 right-0 w-5 h-5 border-b-4 border-r-4 border-indigo-400 rounded-br-lg" />
                 </div>
               </div>
-              {loading && (
+              {!cameraActive && !error && (
                 <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
                   <Loader2 className="w-8 h-8 text-indigo-400 animate-spin" />
+                </div>
+              )}
+              {scanning && cameraActive && (
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/50 px-4 py-1 rounded-full">
+                  <span className="text-white text-xs animate-pulse">🔍 Recherche...</span>
                 </div>
               )}
             </div>
             <p className="text-gray-500 text-xs text-center">
               Pointez la caméra vers le code-barres — détection automatique
             </p>
+            {error && (
+              <p className="text-red-400 text-xs text-center">{error}</p>
+            )}
           </div>
         )}
 
