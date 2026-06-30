@@ -92,7 +92,7 @@ export function BarcodeLookup({ onFound, className }: BarcodeLookupProps) {
   }, [lookup]);
 
   const stopCamera = useCallback(() => {
-    scannerRef.current?.reset();
+    (scannerRef.current as any)?.reset();
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
     scannerRef.current = null;

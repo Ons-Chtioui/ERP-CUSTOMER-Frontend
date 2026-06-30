@@ -1,6 +1,7 @@
+// src/components/orders/StockByWarehousePanel.tsx
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Loader2, Warehouse, Wrench } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useProductStockByWarehouse } from '@/hooks/useOrders';
@@ -23,14 +24,25 @@ export function StockByWarehousePanel({
 }: StockByWarehousePanelProps) {
   const { data: stocks = [], isLoading } = useProductStockByWarehouse(productId);
 
+  // ✅ Ref pour éviter les mises à jour infinies
+  const previousStockRef = useRef<string>('');
+
   useEffect(() => {
     if (!selectedWarehouseId || !onWarehouseStock) return;
+
     const row = stocks.find((s) => s.warehouseId === selectedWarehouseId);
-    if (row) {
+    if (!row) return;
+
+    // ✅ Créer une clé unique pour comparer les données
+    const stockKey = `${row.stockFini}-${row.stockFabricable}-${row.stockTotal}`;
+
+    // ✅ Ne mettre à jour que si les données ont changé
+    if (previousStockRef.current !== stockKey) {
+      previousStockRef.current = stockKey;
       onWarehouseStock({
-        stockFini:       row.stockFini,
+        stockFini: row.stockFini,
         stockFabricable: row.stockFabricable,
-        stockTotal:      row.stockTotal,
+        stockTotal: row.stockTotal,
       });
     }
   }, [stocks, selectedWarehouseId, onWarehouseStock]);

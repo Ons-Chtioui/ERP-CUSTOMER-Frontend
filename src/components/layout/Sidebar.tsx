@@ -17,6 +17,7 @@ import {
   FileText,
   Receipt,
   Truck,
+  Mail,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
@@ -31,6 +32,7 @@ const NAV = [
   { href: '/stock-movements', label: 'Mouvements',     icon: TrendingUp,      permission: 'stock.view' },
   { href: '/inventory',       label: 'Inventaire',     icon: ClipboardList,   permission: 'stock.inventory' },
   { href: '/alerts',          label: 'Alertes',        icon: Bell,            permission: 'stock.view' },
+  { href: '/emails',          label: 'E-mails',        icon: Mail,            permission: 'emails.read' },
   { href: '/products',        label: 'Produits finis', icon: Layers,          permission: 'bom.view' },
   { href: '/clients',         label: 'Clients',         icon: Users,          permission: 'clients.view' },
   { href: '/orders',          label: 'Commandes',      icon: ShoppingCart,    permission: 'orders.view' },

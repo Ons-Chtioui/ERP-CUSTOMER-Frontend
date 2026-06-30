@@ -15,11 +15,10 @@ import { StatusPieChart } from '@/components/analytics/Statuspiechart';
 import { ExportButtons } from '@/components/analytics/ExportButtons';
 
 const CURRENT_YEAR = new Date().getFullYear();
-const YEARS = [CURRENT_YEAR, CURRENT_YEAR - 1, CURRENT_YEAR - 2];
+const YEARS = [CURRENT_YEAR, CURRENT_YEAR - 1, CURRENT_YEAR - 2,CURRENT_YEAR - 3,CURRENT_YEAR - 4];
 
 export default function DashboardPage() {
   const [year, setYear] = useState(CURRENT_YEAR);
-
   const {
     isLoading, isError,
     kpis, monthlyCa, topProducts,
@@ -135,7 +134,7 @@ export default function DashboardPage() {
           icon={<Package className="w-5 h-5" />}
           color={kpis.lowStockCount > 0 ? 'text-orange-400' : 'text-green-400'}
           subtitle={kpis.lowStockCount > 0 ? 'Réappro. nécessaire' : 'Stock OK ✓'}
-          href="/stock-alerts"
+          href="/alerts"
         />
       </div>
 
@@ -186,7 +185,16 @@ export default function DashboardPage() {
             </h2>
             <span className="text-gray-500 text-xs">par quantité vendue</span>
           </div>
-          <TopProductsChart data={topProducts} metric="totalQty" height={250} />
+          <TopProductsChart
+            data={topProducts.map(p => ({
+              name:      p.name,
+              reference: p.reference,
+              quantity:  p.totalQty,
+              revenue:   p.totalHt,
+            }))}
+            metric="quantity"
+            height={250}
+          />
         </div>
 
         {/* État stock composants */}

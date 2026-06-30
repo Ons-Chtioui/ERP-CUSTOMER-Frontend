@@ -15,7 +15,7 @@ export function ExportButtons({ year }: ExportButtonsProps) {
   const currentYear = year || new Date().getFullYear();
 
   const handleExport = async (type: 'monthly-ca' | 'top-products' | 'dashboard') => {
-    setLoading(type as any);
+    setLoading(type as 'monthly' | 'top' | 'dashboard');
     try {
       const response = await api.get(`/analytics/export/${type}?year=${currentYear}`, {
         responseType: 'blob',
@@ -41,43 +41,42 @@ export function ExportButtons({ year }: ExportButtonsProps) {
   };
 
   const getButtonLabel = (type: string) => {
-    if (loading === type as any) return '⏳ Chargement...';
+    if (loading === type as 'monthly' | 'top' | 'dashboard') return '⏳ Chargement...';
     switch (type) {
-      case 'monthly-ca': return '📊 CA Mensuel';
+      case 'monthly-ca':   return '📊 CA Mensuel';
       case 'top-products': return '🏆 Top Produits';
-      case 'dashboard': return '📋 Dashboard complet';
-      default: return 'Exporter';
+      case 'dashboard':    return '📋 Dashboard complet';
+      default:             return 'Exporter';
     }
   };
 
+  // Le Can est géré par le parent (dashboard/page.tsx) — pas besoin ici
   return (
-    <Can permission="analytics.export">
-      <div className="flex flex-wrap gap-2">
-        <button
-          onClick={() => handleExport('monthly-ca')}
-          disabled={!!loading}
-          className="flex items-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg text-sm text-gray-300 transition disabled:opacity-50"
-        >
-          <FileSpreadsheet className="w-4 h-4" />
-          {getButtonLabel('monthly-ca')}
-        </button>
-        <button
-          onClick={() => handleExport('top-products')}
-          disabled={!!loading}
-          className="flex items-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg text-sm text-gray-300 transition disabled:opacity-50"
-        >
-          <FileSpreadsheet className="w-4 h-4" />
-          {getButtonLabel('top-products')}
-        </button>
-        <button
-          onClick={() => handleExport('dashboard')}
-          disabled={!!loading}
-          className="flex items-center gap-2 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 border border-indigo-500 rounded-lg text-sm text-white transition disabled:opacity-50"
-        >
-          <Download className="w-4 h-4" />
-          {getButtonLabel('dashboard')}
-        </button>
-      </div>
-    </Can>
+    <div className="flex flex-wrap gap-2">
+      <button
+        onClick={() => handleExport('monthly-ca')}
+        disabled={!!loading}
+        className="flex items-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg text-sm text-gray-300 transition disabled:opacity-50"
+      >
+        <FileSpreadsheet className="w-4 h-4" />
+        {getButtonLabel('monthly-ca')}
+      </button>
+      <button
+        onClick={() => handleExport('top-products')}
+        disabled={!!loading}
+        className="flex items-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg text-sm text-gray-300 transition disabled:opacity-50"
+      >
+        <FileSpreadsheet className="w-4 h-4" />
+        {getButtonLabel('top-products')}
+      </button>
+      <button
+        onClick={() => handleExport('dashboard')}
+        disabled={!!loading}
+        className="flex items-center gap-2 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 border border-indigo-500 rounded-lg text-sm text-white transition disabled:opacity-50"
+      >
+        <Download className="w-4 h-4" />
+        {getButtonLabel('dashboard')}
+      </button>
+    </div>
   );
 }

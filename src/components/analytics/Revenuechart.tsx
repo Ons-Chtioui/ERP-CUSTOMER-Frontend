@@ -38,10 +38,12 @@ export function RevenueChart({ data, height = 220 }: RevenueChartProps) {
     );
   }
 
-  // Formater les mois "2024-01" → "Jan 24"
+  // Formater les mois "2024-01" → "Jan 24", mais garder "Jan", "Fév" etc. tels quels
   const formattedData = data.map(d => ({
     ...d,
-    label: new Date(d.month + '-01').toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' }),
+    label: d.month.match(/^\d{4}-\d{2}$/)
+      ? new Date(d.month + '-01').toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' })
+      : d.month,
   }));
 
   return (

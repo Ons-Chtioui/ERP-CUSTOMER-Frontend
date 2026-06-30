@@ -70,7 +70,7 @@ function BarcodeScanner({
   }, [onScan]);
 
   const stopCamera = useCallback(() => {
-    readerRef.current?.reset();
+    (readerRef.current as any)?.reset();
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
     readerRef.current = null;

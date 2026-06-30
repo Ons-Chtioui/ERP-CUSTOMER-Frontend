@@ -69,6 +69,7 @@ export interface StockMovement {
   component: Component;
   warehouse: Warehouse;
   targetWarehouse?: Warehouse;
+  user?: { id: number; prenom: string; nom: string } | null;
   createdAt: Date;
 }
 
