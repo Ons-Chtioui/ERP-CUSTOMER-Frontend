@@ -68,3 +68,15 @@ export const useDeleteDeliveryNote = () => {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['delivery-notes'] }),
   });
 };
+
+// FIX : hook ajouté pour la nouvelle route POST /documents/delivery-notes/:id/send (Bug #4 backend)
+export const useSendDeliveryNoteEmail = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post(`/documents/delivery-notes/${id}/send`).then(r => r.data),
+    onSuccess: (_, id) => {
+      qc.invalidateQueries({ queryKey: ['delivery-notes'] });
+      qc.invalidateQueries({ queryKey: ['delivery-notes', id] });
+    },
+  });
+};
